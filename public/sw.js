@@ -1,4 +1,4 @@
-const CACHE = "ironlog-v2";
+const CACHE = "ironlog-v3";
 const ASSETS = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (e) => {
@@ -21,7 +21,7 @@ self.addEventListener("fetch", (e) => {
         .then((res) => {
           if (res && res.status === 200) {
             const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(e.request, copy));
+            e.waitUntil(caches.open(CACHE).then((c) => c.put(e.request, copy)));
           }
           return res;
         })
