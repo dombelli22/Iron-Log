@@ -1,0 +1,31 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #101113;
+  height: 100%;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.diag {
+  color: #eeeae5;
+  background: #101113;
+  padding: 24px;
+  font-family: -apple-system, system-ui, sans-serif;
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.diag b {
+  color: #d6293b;
+}
