@@ -117,7 +117,13 @@ meant moving it off the old Back/Chest&Back day onto the dedicated
 Shoulders (Bro Split) or Shoulders & Arms (Arnold) day instead, not just
 carrying it over under the old day, to keep it consistently a "shoulders"
 muscle across every plan rather than a "back" one in some and "shoulders"
-in others.
+in others. Deliberately capped at once a week per plan for now (every
+plan's default schedule assigns each of its own day keys to exactly one
+weekday, so one day carrying the slot means once weekly) — the 6-day PPL
+plan initially had it on both Pull 1 and Pull 2 (twice weekly, since that
+plan repeats Pull), which was trimmed back to Pull 1 only to match every
+other plan. Revisit this if traps ever warrant higher frequency than once
+a week the way some other muscles get in the higher-frequency plans.
 
 - `days` has the same per-day shape as the original single plan: keyed by a
   unique day name, each `{ label, subtitle, tab, slots }`. The day *tabs* in
@@ -334,11 +340,22 @@ primary/secondary status object into the package's
 whole plan was built around. Used to show a "bump the weight" nudge when the
 last logged set for that exercise hit or exceeded the top of its range.
 
-`slotExerciseLibrary` / `bodyParts`: derived (via `useMemo`) from the active
-plan's `days` — the union of every exercise ever listed under a given slot
-name, grouped by body part (the part before " — " in the slot name). Powers
-the "add an exercise that's existing in the plan" guided flow (body part →
-specific part → exercise), independent of which day you're viewing.
+`slotExerciseLibrary` / `bodyParts`: power the guided "Existing within
+database" add-exercise flow (generic body part → specific slot →
+exercise), and are just aliases for `GLOBAL_SLOT_LIBRARY` and
+`GENERIC_BODY_PARTS` from `plans.js` — not derived from the active plan at
+all, so the flow always offers every exercise in the whole shared catalog,
+regardless of which plan or day you're viewing. This used to be scoped to
+only whatever the active plan's own days happened to use (derived via
+`useMemo` from `workoutData`), with body parts grouped by naively splitting
+the slot name on " — " (so e.g. "Front Delts" and "Rear Delts", having no
+dash, each became their own top-level part instead of grouping under
+"Shoulders"). `GENERIC_BODY_PARTS` (`plans.js`) fixes both: an explicit
+`SLOT_TO_GENERIC_BODY_PART` map buckets all ~27 slots into five broad parts
+(Chest, Back, Shoulders, Arms, Legs, in that fixed order) with a
+prefix-based fallback for any slot the map doesn't yet cover, so a future
+slot never silently disappears from the picker just because this map
+wasn't updated for it.
 
 ## Logging model (per day, in component state)
 
@@ -625,6 +642,22 @@ The four photos were swapped once for a "classic gym" look specifically
 (worn iron, high-ceiling old-building gyms, dramatic B&W shots) — same
 Unsplash-License sourcing/verification process, same file names, so nothing
 else about `PageBackground` needed to change.
+
+**Path bug, since fixed**: `BG_IMAGES` and `QUOTE_BG_IMAGES` (`App.jsx`)
+originally used absolute paths (`/bg/home.webp`, `/quotes/gym-1.webp`).
+These are plain runtime JS string constants read into `<img src>`/
+`background-image: url()`, not `import`ed assets, so Vite's `base: "./"`
+handling (see the note on `vite.config.js` above) never touches them — an
+absolute path resolves against the domain root regardless. That's silently
+correct on the Vite dev server (which serves at the root) but breaks on the
+deployed GitHub Pages **project subpath** (`/Iron-Log/`), 404ing every
+background and quote photo — invisible in all local testing, only caught by
+inspecting real network requests against the live production URL. Fixed by
+making all 8 paths relative (`bg/home.webp`, `quotes/gym-1.webp`, etc.) so
+they resolve against the current document's URL instead. If any future
+image/asset path is added as a plain string constant like this (rather than
+through Vite's `import`/`public/`-relative-`<img>`-in-JSX handling), it
+needs to stay relative for the same reason.
 
 ### Workout-complete quote photos
 

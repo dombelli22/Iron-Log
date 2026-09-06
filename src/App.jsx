@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Dumbbell, Plus, Trash2, ChevronDown, Save, X, Loader2, History as HistoryIcon, RotateCcw, Timer, TrendingUp, Layers, Home as HomeIcon, Calendar as CalendarIcon } from "lucide-react";
 import { storage } from "./storage";
-import { PLAN_LIBRARY, ALL_DAYS_BY_KEY, WEEKDAYS, getScheduledDay, GLOBAL_SLOT_LIBRARY, GLOBAL_SLOT_NAMES, GLOBAL_EXERCISE_LIST } from "./plans";
+import { PLAN_LIBRARY, ALL_DAYS_BY_KEY, WEEKDAYS, getScheduledDay, GLOBAL_SLOT_LIBRARY, GLOBAL_SLOT_NAMES, GLOBAL_EXERCISE_LIST, GENERIC_BODY_PARTS } from "./plans";
 import BodyModel from "react-body-highlighter";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -134,7 +134,7 @@ const COMPLETION_QUOTES = [
 // quote itself each time a workout is saved. Shown at full opacity (not
 // dimmed the way the per-page backgrounds are) since these are meant to
 // stand out, not sit quietly behind content.
-const QUOTE_BG_IMAGES = ["/quotes/gym-1.webp", "/quotes/gym-2.webp", "/quotes/gym-3.webp", "/quotes/gym-4.webp"];
+const QUOTE_BG_IMAGES = ["quotes/gym-1.webp", "quotes/gym-2.webp", "quotes/gym-3.webp", "quotes/gym-4.webp"];
 
 // ---------------------------------------------------------------------------
 // Muscle map — every exercise tagged with the muscles it engages: primary
@@ -813,10 +813,10 @@ function AddPastWorkoutSetup({ plan, onStart, onBack }) {
 // not literal content — every real UI element still sits on its own solid
 // --surface card on top, so this never competes with anything readable.
 const BG_IMAGES = {
-  home: "/bg/home.webp",
-  log: "/bg/log.webp",
-  history: "/bg/history.webp",
-  utility: "/bg/utility.webp",
+  home: "bg/home.webp",
+  log: "bg/log.webp",
+  history: "bg/history.webp",
+  utility: "bg/utility.webp",
 };
 
 function PageBackground({ image }) {
@@ -1455,34 +1455,15 @@ export default function WorkoutTracker() {
     [activeSchedule, workoutData]
   );
 
-  // Whole-plan exercise library — every slot name mapped to the union of
-  // every exercise ever listed under it, across all days of the active
-  // plan. Powers "add an existing exercise" independent of which day
-  // you're viewing. Body parts group slot names by their prefix
-  // (e.g. "Chest — Upper" -> "Chest"). Recomputed whenever the plan changes.
-  const slotExerciseLibrary = useMemo(() => {
-    const lib = {};
-    if (!workoutData) return lib;
-    Object.values(workoutData).forEach((dayObj) => {
-      dayObj.slots.forEach((slot) => {
-        if (!lib[slot.name]) lib[slot.name] = [];
-        slot.exercises.forEach((ex) => {
-          if (!lib[slot.name].some((e) => e.name === ex.name)) lib[slot.name].push(ex);
-        });
-      });
-    });
-    return lib;
-  }, [workoutData]);
-
-  const bodyParts = useMemo(() => {
-    const parts = {};
-    Object.keys(slotExerciseLibrary).forEach((slotName) => {
-      const part = slotName.includes(" — ") ? slotName.split(" — ")[0] : slotName;
-      if (!parts[part]) parts[part] = [];
-      if (!parts[part].includes(slotName)) parts[part].push(slotName);
-    });
-    return parts;
-  }, [slotExerciseLibrary]);
+  // Exercise library for "add an existing exercise": the whole shared
+  // catalog (every slot name -> its full exercise list), not just whatever
+  // the active plan's own days happen to use — so the guided flow can pull
+  // any exercise in the app's database, independent of which plan/day
+  // you're viewing. `bodyParts` groups slot names into broad, generic
+  // categories (Chest, Back, Shoulders, Arms, Legs) for a two-level picker,
+  // rather than one flat list of ~27 specific slot names.
+  const slotExerciseLibrary = GLOBAL_SLOT_LIBRARY;
+  const bodyParts = GENERIC_BODY_PARTS;
 
   function getSlot(d, slotName) {
     return workoutData[d].slots.find((s) => s.name === slotName);
@@ -2876,8 +2857,8 @@ export default function WorkoutTracker() {
               {addFlow.step === "choose" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   <button onClick={chooseExisting} style={{ width: "100%", textAlign: "left", padding: "12px 14px", borderRadius: 10, background: "var(--surface-2)", border: "1px solid var(--border)", cursor: "pointer", color: "var(--text)" }}>
-                    <div style={{ fontWeight: 700, fontSize: 13.5 }}>Existing in the Plan</div>
-                    <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>Pull a lift already defined elsewhere in your split — gets weight/rep dropdowns, muscle diagram, and history.</div>
+                    <div style={{ fontWeight: 700, fontSize: 13.5 }}>Existing within database</div>
+                    <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>Pull a lift from the app's full exercise database — gets weight/rep dropdowns, muscle diagram, and history.</div>
                   </button>
                   <button onClick={chooseNew} style={{ width: "100%", textAlign: "left", padding: "12px 14px", borderRadius: 10, background: "var(--surface-2)", border: "1px solid var(--border)", cursor: "pointer", color: "var(--text)" }}>
                     <div style={{ fontWeight: 700, fontSize: 13.5 }}>New Exercise</div>

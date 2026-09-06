@@ -317,7 +317,7 @@ const PPL_DAYS = {
     label: "Pull",
     subtitle: "Back, Biceps, Rear Delts",
     tab: "Pull 2",
-    slots: slots("Back — Width", "Back — Thickness", "Back — Lower Lat", "Shoulders — Traps", "Biceps — Long Head", "Biceps — Short Head", "Biceps — Brachialis", "Rear Delts"),
+    slots: slots("Back — Width", "Back — Thickness", "Back — Lower Lat", "Biceps — Long Head", "Biceps — Short Head", "Biceps — Brachialis", "Rear Delts"),
   },
   "Legs 2": {
     label: "Legs",
@@ -559,3 +559,49 @@ export const GLOBAL_EXERCISE_LIST = Object.values(GLOBAL_SLOT_LIBRARY)
   .flat()
   .filter((ex, i, arr) => arr.findIndex((e) => e.name === ex.name) === i)
   .sort((a, b) => a.name.localeCompare(b.name));
+
+// Powers the "Existing within database" two-level picker in the guided
+// add-exercise flow: a broad, generic body part first (Chest, Back,
+// Shoulders, Arms, Legs), then the specific slots within it (e.g. Chest ->
+// "Chest — Upper"/"Chest — Middle"/"Chest — Lower") with that slot's full
+// exercise list underneath — pulled from the whole shared catalog above,
+// not scoped to whatever the active plan happens to use. Explicit rather
+// than derived from slot-name prefixes, since "Front Delts"/"Rear Delts"
+// (no " — ") need to land under "Shoulders" too, not become their own
+// top-level entries the way the old plan-scoped grouping did.
+const SLOT_TO_GENERIC_BODY_PART = {
+  "Chest — Upper": "Chest", "Chest — Middle": "Chest", "Chest — Lower": "Chest",
+  "Back — Width": "Back", "Back — Thickness": "Back", "Back — Lower Lat": "Back",
+  "Front Delts": "Shoulders", "Rear Delts": "Shoulders",
+  "Shoulders — Front/Mid": "Shoulders", "Shoulders — Side": "Shoulders", "Shoulders — Traps": "Shoulders",
+  "Biceps — Long Head": "Arms", "Biceps — Short Head": "Arms", "Biceps — Brachialis": "Arms",
+  "Triceps — Long Head": "Arms", "Triceps — Lateral Head": "Arms", "Triceps — Medial Head": "Arms",
+  "Arms — Biceps": "Arms", "Arms — Triceps": "Arms",
+  "Quads — Primary": "Legs", "Quads — Secondary": "Legs", Quads: "Legs",
+  Hamstrings: "Legs", Glutes: "Legs", "Glute Medius / Abductors": "Legs",
+  Adductors: "Legs", Calves: "Legs",
+};
+const GENERIC_BODY_PART_ORDER = ["Chest", "Back", "Shoulders", "Arms", "Legs"];
+
+export const GENERIC_BODY_PARTS = (() => {
+  const grouped = {};
+  Object.keys(GLOBAL_SLOT_LIBRARY).forEach((slotName) => {
+    // Falls back to the old prefix-based grouping for any slot name not
+    // (yet) listed above, so a future slot never silently disappears from
+    // the picker just because this map wasn't updated for it.
+    const part = SLOT_TO_GENERIC_BODY_PART[slotName] || (slotName.includes(" — ") ? slotName.split(" — ")[0] : slotName);
+    if (!grouped[part]) grouped[part] = [];
+    grouped[part].push(slotName);
+  });
+  const ordered = {};
+  GENERIC_BODY_PART_ORDER.forEach((part) => {
+    if (grouped[part]) {
+      ordered[part] = grouped[part];
+      delete grouped[part];
+    }
+  });
+  // Any leftover (unmapped) parts still show up, just after the five
+  // known ones rather than being lost.
+  Object.keys(grouped).forEach((part) => { ordered[part] = grouped[part]; });
+  return ordered;
+})();
