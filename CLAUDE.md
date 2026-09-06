@@ -421,6 +421,77 @@ returns to History. This is the same `saveWorkout`/`discardSession` used for
 a normal live session — backfill only changes what date/day get written and
 where you land afterward, not the drafting mechanics themselves.
 
+### Workout-complete quote
+
+Saving any workout (live or backfilled) shows `CompletionQuoteModal`, a
+full-screen overlay with a random pick from `COMPLETION_QUOTES` (50
+entries) — real, attributed quotes, majority (34) from bodybuilders,
+strongmen, and other health/strength figures, the rest (16) from war
+generals, deliberately not generic gym-poster lines.
+
+Bodybuilders/strongmen/other strength figures: Schwarzenegger (5), Jack
+LaLanne (2), Charles Atlas, Steve Reeves, Eugen Sandow, Ronnie Coleman (3),
+Lee Haney, Kai Greene, Frank Zane, Vince Gironda, Mike Mentzer, Jón Páll
+Sigmarsson, Jay Cutler, CT Fletcher, John Grimek, Chris Bumstead (2), Dorian
+Yates, Tom Platz, Kevin Levrone, David Goggins (3), Jocko Willink, Cameron
+Hanes, Mark Bell, Elliott Hulse — spans historical (Sandow, Atlas) through
+former Mr. Olympia-era competitors (Coleman, Haney, Cutler, Bumstead) and
+other popular strength/health figures who aren't competitive bodybuilders
+at all (Goggins — ultra-endurance/ex-Navy SEAL, Jocko Willink — ex-Navy
+SEAL, Cameron Hanes — bowhunter/endurance athlete, Mark Bell — powerlifter,
+Elliott Hulse — strongman/strength coach), per an explicit ask to widen the
+pool beyond strict bodybuilding. The added entries came from a live web
+search (not just recalled from training data) specifically to verify
+wording/attribution rather than guess. War generals, US (Patton,
+Eisenhower, MacArthur, Grant, Washington, Marshall, Powell, Schwarzkopf) and
+non-US (Napoleon, Sun Tzu, Rommel, Hannibal, Alexander the Great, Julius
+Caesar, Montgomery, Suvorov).
+
+A few of the less-formal bodybuilder entries (Zane, Gironda, Mentzer,
+Grimek) are commonly-cited summaries of each figure's well-documented
+training philosophy rather than a single verbatim-sourced line — flagged
+here rather than presented as equally ironclad as the rest; every other
+entry (including all the newer web-sourced additions) is a specific,
+consistently-attributed line. Dismissed by the Continue button or by
+clicking the backdrop; state is just `completionQuote` (`null` when
+hidden), set at the end of `saveWorkout` and cleared by the modal's
+`onClose`.
+
+### A live day's workout stays visible for the week
+
+Saving a **live** (non-backfill) session no longer clears that day's draft —
+`draft`/`customDraft[day]`/`addedDraft[day]` are left populated so the Log
+tab keeps showing what you logged, editable, through the rest of that
+calendar week (Monday-Sunday, via `weekKeyFor`/`mondayOf` in `App.jsx`).
+Saving again while the same week is still current **updates that same
+history entry** instead of appending a duplicate — the Save button itself
+relabels to "Update Workout" once `hasCurrentWeekEntry` is true. Backfill
+sessions are entirely exempt from all of this (checked via `!backfill`
+throughout): they always create a new entry and always clear the draft
+afterward, same as before this feature.
+
+This is backed by a new persisted map, `weekDrafts` (`localStorage` key
+`ironlog:week-drafts`), shape `{ [dayKey]: { weekKey, sessionId, draft,
+customDraft, addedDraft } }` — `draft` here is pre-scoped to just that day's
+own slot names (filtered out of the global, slot-name-keyed `draft` object
+at save time) so this feature doesn't inherit the existing cross-day
+slot-collision issue into persisted storage. On load, any entry whose
+`weekKey` isn't the current week is pruned immediately. A `useEffect` keyed
+on `day` (guarded by a `dayLiveWeekKeyRef` ref so it only acts once per day
+per week) either hydrates the live draft from a matching `weekDrafts` entry
+or, if none matches, clears that day's slots — the latter branch is what
+resets a day back to blank once its week has actually ended, including for
+a long-lived session that happens to stay open across the week boundary.
+
+`discardSession` now reverts to the last-saved-this-week state (from
+`weekDrafts`) rather than wiping to fully blank, when one exists — otherwise
+discarding an edit to an already-completed day would erase the whole
+day's logged workout, not just the unsaved change. `deleteSession` cleans up
+the matching `weekDrafts` entry when the deleted history row is the one
+currently linked to a day, and if that day is the one on screen, clears its
+live draft too — so deleting "this week's" entry doesn't leave a populated
+form that's silently no longer backed by any history record.
+
 ## Visual design conventions
 
 - Dark theme: `--bg:#101113`, `--surface:#1A1B20`, `--surface-2:#222329`,

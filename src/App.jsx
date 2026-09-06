@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Dumbbell, Plus, Trash2, ChevronDown, Save, X, Loader2, History as HistoryIcon, RotateCcw, Timer, TrendingUp, Layers, Home as HomeIcon, Calendar as CalendarIcon } from "lucide-react";
 import { storage } from "./storage";
 import { PLAN_LIBRARY, ALL_DAYS_BY_KEY, WEEKDAYS, getScheduledDay, GLOBAL_SLOT_LIBRARY, GLOBAL_SLOT_NAMES, GLOBAL_EXERCISE_LIST } from "./plans";
@@ -22,6 +22,78 @@ function range(start, end, step) {
   return out;
 }
 const REPS_OPTIONS = range(1, 20, 1);
+
+// A completed workout's week runs Monday-Sunday; this key (that Monday's
+// date) is what decides whether a day's logged data should still be
+// showing in the Log tab or whether a new week has started and it should
+// reset. Plain date-string math, no ISO week-number edge cases.
+function mondayOf(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00`);
+  const dow = d.getDay(); // 0 Sun .. 6 Sat
+  d.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow));
+  return d.toISOString().slice(0, 10);
+}
+const weekKeyFor = (dateStr) => mondayOf(dateStr);
+
+// Shown after a workout is saved. Real, attributed quotes only, majority
+// from bodybuilders/strongmen/other health-and-strength figures (historical
+// through current, on the app's own "building your body" theme, informal
+// is fine) with the rest from war generals (US and otherwise) — nothing
+// generic-gym-poster.
+const COMPLETION_QUOTES = [
+  // Bodybuilders, strongmen & other health/strength figures
+  { quote: "The mind is the limit. As long as the mind can envision the fact that you can do something, you can do it, as long as you really believe 100 percent.", author: "Arnold Schwarzenegger" },
+  { quote: "For me, life is continuously being hungry. The meaning of life is not simply to exist, to survive, but to move ahead, to go up, to achieve, to conquer.", author: "Arnold Schwarzenegger" },
+  { quote: "Strength does not come from winning. Your struggles develop your strengths.", author: "Arnold Schwarzenegger" },
+  { quote: "Everybody pities the weak; jealousy you have to earn.", author: "Arnold Schwarzenegger" },
+  { quote: "You can't climb the ladder of success with your hands in your pockets.", author: "Arnold Schwarzenegger" },
+  { quote: "Exercise is king. Nutrition is queen. Put them together and you've got a kingdom.", author: "Jack LaLanne" },
+  { quote: "Your waistline is your lifeline.", author: "Jack LaLanne" },
+  { quote: "Nobody ever drowned in his own sweat.", author: "Charles Atlas" },
+  { quote: "You have to want it. If you don't want it, you're not going to get anywhere.", author: "Steve Reeves" },
+  { quote: "The muscles grow while you rest, not while you exercise.", author: "Eugen Sandow" },
+  { quote: "Everybody wants to be a bodybuilder, but don't nobody want to lift this heavy-ass weight.", author: "Ronnie Coleman" },
+  { quote: "Ain't nothing to it but to do it.", author: "Ronnie Coleman" },
+  { quote: "Light weight, baby! Yeah buddy!", author: "Ronnie Coleman" },
+  { quote: "Stimulate the muscle, don't annihilate it.", author: "Lee Haney" },
+  { quote: "On the other side of pain is success.", author: "Kai Greene" },
+  { quote: "Symmetry, proportion, and muscularity — that's what bodybuilding is about.", author: "Frank Zane" },
+  { quote: "Bodybuilding is like any other sport — to excel, you must dedicate yourself completely.", author: "Vince Gironda" },
+  { quote: "Bodybuilding is, above all else, a form of self-improvement.", author: "Mike Mentzer" },
+  { quote: "There's no reason to be the strongest man in the graveyard.", author: "Jón Páll Sigmarsson" },
+  { quote: "Nobody grows in the off-season — they just get fat and call it the off-season.", author: "Jay Cutler" },
+  { quote: "It's a great day to be great!", author: "CT Fletcher" },
+  { quote: "We don't fight against any opponent — we fight to make ourselves better than we were the day before.", author: "John Grimek" },
+  { quote: "Winning doesn't happen on show day. It happens in early mornings, painful workouts, long cardio sessions, and hungry nights.", author: "Chris Bumstead" },
+  { quote: "Bodybuilding is art, and my body is the canvas.", author: "Chris Bumstead" },
+  { quote: "The mind always fails first, not the body.", author: "Dorian Yates" },
+  { quote: "When you're uncomfortable is when you grow.", author: "Tom Platz" },
+  { quote: "Intensity builds immensity.", author: "Kevin Levrone" },
+  { quote: "Don't stop when you're tired. Stop when you're done.", author: "David Goggins" },
+  { quote: "The most important conversations you'll ever have are the ones you'll have with yourself.", author: "David Goggins" },
+  { quote: "You are in danger of living a life so comfortable and soft that you will die without ever realizing your true potential.", author: "David Goggins" },
+  { quote: "Don't count on motivation. Count on discipline.", author: "Jocko Willink" },
+  { quote: "Nobody cares. Work harder.", author: "Cameron Hanes" },
+  { quote: "Strength is never a weakness.", author: "Mark Bell" },
+  { quote: "Train like an athlete, eat like a bodybuilder.", author: "Elliott Hulse" },
+  // War generals
+  { quote: "Accept the challenges so that you can feel the exhilaration of victory.", author: "Gen. George S. Patton" },
+  { quote: "In preparing for battle I have always found that plans are useless, but planning is indispensable.", author: "Gen. Dwight D. Eisenhower" },
+  { quote: "Age wrinkles the body. Quitting wrinkles the soul.", author: "Gen. Douglas MacArthur" },
+  { quote: "The art of war is simple enough. Find out where your enemy is. Get at him as soon as you can. Strike him as hard as you can, and keep moving on.", author: "Gen. Ulysses S. Grant" },
+  { quote: "Discipline is the soul of an army.", author: "Gen. George Washington" },
+  { quote: "It is fatal to enter any war without the will to win it.", author: "Gen. George C. Marshall" },
+  { quote: "A dream doesn't become reality through magic; it takes sweat, determination and hard work.", author: "Gen. Colin Powell" },
+  { quote: "The truth of the matter is that you always know the right thing to do. The hard part is doing it.", author: "Gen. Norman Schwarzkopf" },
+  { quote: "Morale is the greatest single factor in successful war.", author: "Field Marshal Bernard Montgomery" },
+  { quote: "Train hard, fight easy.", author: "Generalissimo Alexander Suvorov" },
+  { quote: "Victory belongs to the most persevering.", author: "Napoleon Bonaparte" },
+  { quote: "Victorious warriors win first and then go to war, while defeated warriors go to war first and then seek to win.", author: "Sun Tzu" },
+  { quote: "Do not fight a battle if you don't gain anything by winning.", author: "Field Marshal Erwin Rommel" },
+  { quote: "We will either find a way, or make one.", author: "Hannibal Barca" },
+  { quote: "There is nothing impossible to him who will try.", author: "Alexander the Great" },
+  { quote: "Experience is the teacher of all things.", author: "Julius Caesar" },
+];
 
 // ---------------------------------------------------------------------------
 // Muscle map — every exercise tagged with the muscles it engages: primary
@@ -678,6 +750,31 @@ function AddPastWorkoutSetup({ plan, onStart, onBack }) {
   );
 }
 
+// Shown right after a workout is saved (live or backfilled).
+function CompletionQuoteModal({ quote, onClose }) {
+  if (!quote) return null;
+  return (
+    <div
+      onClick={onClose}
+      style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+    >
+      <div onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420, width: "100%", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 16, padding: "28px 24px", textAlign: "center" }}>
+        <div className="display" style={{ fontSize: 11, color: "var(--accent)", letterSpacing: "0.1em", marginBottom: 18 }}>Workout Complete</div>
+        <div style={{ fontSize: 17, lineHeight: 1.55, color: "var(--text)", fontStyle: "italic", marginBottom: 14 }}>
+          &ldquo;{quote.quote}&rdquo;
+        </div>
+        <div className="display" style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 22 }}>— {quote.author}</div>
+        <button
+          onClick={onClose}
+          style={{ width: "100%", padding: "12px", borderRadius: 10, background: "var(--accent)", border: "none", cursor: "pointer", fontSize: 14, fontWeight: 700, color: "var(--on-accent)" }}
+        >
+          Continue
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const EQUIP_CHOICES = ["Barbell", "EZ-Bar", "Dumbbell", "Cable", "Machine", "Bodyweight"];
 
 // Sentinel `day` value used only while backfilling a past workout that
@@ -1106,6 +1203,14 @@ export default function WorkoutTracker() {
   const [addFlow, setAddFlow] = useState(null); // null | { step, bodyPart, slotName }
   const [customPlans, setCustomPlans] = useState([]); // user-built plans, same shape as PLAN_LIBRARY entries
   const [customPlansLoaded, setCustomPlansLoaded] = useState(false);
+  // A live (non-backfilled) day's completed workout, kept for reference/editing
+  // in the Log tab through the rest of that calendar week: { [dayKey]: { weekKey,
+  // sessionId, draft, customDraft, addedDraft } }. Re-saving while weekKey still
+  // matches updates that same history entry instead of creating a duplicate.
+  const [weekDrafts, setWeekDrafts] = useState({});
+  const [weekDraftsLoaded, setWeekDraftsLoaded] = useState(false);
+  const dayLiveWeekKeyRef = useRef({}); // [dayKey]: the weekKey currently reflected in live draft state
+  const [completionQuote, setCompletionQuote] = useState(null); // { quote, author } | null — shown after a save
 
   useEffect(() => {
     let cancelled = false;
@@ -1190,6 +1295,30 @@ export default function WorkoutTracker() {
         // no history saved yet
       } finally {
         if (!cancelled) setHistoryLoaded(true);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const res = await storage.get("week-drafts", false);
+        if (!cancelled && res && res.value) {
+          const parsed = JSON.parse(res.value);
+          const currentWeekKey = weekKeyFor(todayISO());
+          const pruned = Object.fromEntries(Object.entries(parsed).filter(([, v]) => v.weekKey === currentWeekKey));
+          setWeekDrafts(pruned);
+          if (Object.keys(pruned).length !== Object.keys(parsed).length) {
+            storage.set("week-drafts", JSON.stringify(pruned), false).catch(() => {});
+          }
+        }
+      } catch (e) {
+        // nothing logged yet this week
+      } finally {
+        if (!cancelled) setWeekDraftsLoaded(true);
       }
     }
     load();
@@ -1381,6 +1510,32 @@ export default function WorkoutTracker() {
   }
 
   const dayData = workoutData && day ? workoutData[day] : null;
+
+  // Keeps a completed live day's draft showing (for reference/editing) through
+  // the rest of that calendar week, and makes sure a long-lived session that
+  // crosses into a new week doesn't keep showing last week's data. Runs once
+  // per day per week — after that, in-memory edits are left alone.
+  useEffect(() => {
+    if (!weekDraftsLoaded || !dayData || !day || backfill || day === BACKFILL_CUSTOM_KEY) return;
+    const currentWeekKey = weekKeyFor(todayISO());
+    if (dayLiveWeekKeyRef.current[day] === currentWeekKey) return;
+    const saved = weekDrafts[day];
+    if (saved && saved.weekKey === currentWeekKey) {
+      setDraft((prev) => ({ ...prev, ...saved.draft }));
+      setCustomDraft((prev) => ({ ...prev, [day]: saved.customDraft || [] }));
+      setAddedDraft((prev) => ({ ...prev, [day]: saved.addedDraft || [] }));
+    } else {
+      const daySlotNames = dayData.slots.map((s) => s.name);
+      setDraft((prev) => {
+        const next = { ...prev };
+        daySlotNames.forEach((name) => { delete next[name]; });
+        return next;
+      });
+      setCustomDraft((prev) => ({ ...prev, [day]: [] }));
+      setAddedDraft((prev) => ({ ...prev, [day]: [] }));
+    }
+    dayLiveWeekKeyRef.current[day] = currentWeekKey;
+  }, [day, dayData, weekDraftsLoaded, weekDrafts, backfill]);
 
   // Filters out exercises the user has removed from a slot's library, but
   // never returns an empty list (a slot always needs at least one option).
@@ -1711,15 +1866,26 @@ export default function WorkoutTracker() {
     return sessionBlocks.find((b) => b.slot === slotName)?.sets.length || 0;
   }
 
+  // Live (non-backfill) session for the current week already showing in the
+  // Log tab, if any — used to decide whether Save should update that entry
+  // instead of creating a duplicate, and what Discard should revert to.
+  const currentWeekEntry = !backfill && day ? weekDrafts[day] : null;
+  const hasCurrentWeekEntry = !!(currentWeekEntry && currentWeekEntry.weekKey === weekKeyFor(todayISO()));
+
   function discardSession() {
     if (backfill) {
       cancelBackfill();
       return;
     }
-    setDraft({});
-    setCustomDraft((prev) => ({ ...prev, [day]: [] }));
+    const restoreToSaved = hasCurrentWeekEntry;
+    setDraft((prev) => {
+      const next = { ...prev };
+      (dayData?.slots || []).forEach((s) => { delete next[s.name]; });
+      return restoreToSaved ? { ...next, ...currentWeekEntry.draft } : next;
+    });
+    setCustomDraft((prev) => ({ ...prev, [day]: restoreToSaved ? (currentWeekEntry.customDraft || []) : [] }));
     setOpenCustomId(null);
-    setAddedDraft((prev) => ({ ...prev, [day]: [] }));
+    setAddedDraft((prev) => ({ ...prev, [day]: restoreToSaved ? (currentWeekEntry.addedDraft || []) : [] }));
     setOpenAddedId(null);
     setAddFlow(null);
   }
@@ -1730,24 +1896,40 @@ export default function WorkoutTracker() {
     setStorageError(null);
     const sessionDate = backfill ? backfill.date : todayISO();
     const sessionDay = backfill ? (isCustomBackfill ? "Custom Workout" : backfill.dayKey) : day;
-    const session = { id: `${Date.now()}`, date: sessionDate, day: sessionDay, blocks: sessionBlocks };
+    const isUpdatingThisWeek = hasCurrentWeekEntry && history.some((h) => h.id === currentWeekEntry.sessionId);
+    const sessionId = isUpdatingThisWeek ? currentWeekEntry.sessionId : `${Date.now()}`;
+    const session = { id: sessionId, date: sessionDate, day: sessionDay, blocks: sessionBlocks };
     try {
-      const updated = [...history, session];
+      const updated = isUpdatingThisWeek ? history.map((h) => (h.id === sessionId ? session : h)) : [...history, session];
       const res = await storage.set("workout-history", JSON.stringify(updated), false);
       if (res) {
         setHistory(updated);
-        setDraft({});
-        setCustomDraft((prev) => ({ ...prev, [day]: [] }));
-        setOpenCustomId(null);
-        setAddedDraft((prev) => ({ ...prev, [day]: [] }));
-        setOpenAddedId(null);
         if (backfill) {
+          setDraft({});
+          setCustomDraft((prev) => ({ ...prev, [day]: [] }));
+          setOpenCustomId(null);
+          setAddedDraft((prev) => ({ ...prev, [day]: [] }));
+          setOpenAddedId(null);
           setBackfill(null);
           setDay(activePlan ? getScheduledDay(activePlan, activeSchedule) : null);
           setView("history");
+        } else {
+          // Keep the draft showing for the rest of the week — record what was
+          // saved so it survives a reload, and so re-saving later this week
+          // updates this entry instead of duplicating it.
+          const daySlotNames = new Set((dayData?.slots || []).map((s) => s.name));
+          const scopedDraft = Object.fromEntries(Object.entries(draft).filter(([k]) => daySlotNames.has(k)));
+          const updatedWeekDrafts = {
+            ...weekDrafts,
+            [day]: { weekKey: weekKeyFor(sessionDate), sessionId, draft: scopedDraft, customDraft: customList, addedDraft: addedList },
+          };
+          setWeekDrafts(updatedWeekDrafts);
+          storage.set("week-drafts", JSON.stringify(updatedWeekDrafts), false).catch(() => {});
+          dayLiveWeekKeyRef.current[day] = weekKeyFor(sessionDate);
         }
         setSavedFlash(true);
         setTimeout(() => setSavedFlash(false), 1800);
+        setCompletionQuote(COMPLETION_QUOTES[Math.floor(Math.random() * COMPLETION_QUOTES.length)]);
       } else {
         setStorageError("Couldn't save — try again.");
       }
@@ -1762,7 +1944,27 @@ export default function WorkoutTracker() {
     const updated = history.filter((s) => s.id !== id);
     try {
       const res = await storage.set("workout-history", JSON.stringify(updated), false);
-      if (res) setHistory(updated);
+      if (res) {
+        setHistory(updated);
+        const linkedDayKey = Object.keys(weekDrafts).find((k) => weekDrafts[k].sessionId === id);
+        if (linkedDayKey) {
+          const updatedWeekDrafts = { ...weekDrafts };
+          delete updatedWeekDrafts[linkedDayKey];
+          setWeekDrafts(updatedWeekDrafts);
+          storage.set("week-drafts", JSON.stringify(updatedWeekDrafts), false).catch(() => {});
+          if (linkedDayKey === day) {
+            const linkedSlotNames = (workoutData?.[linkedDayKey]?.slots || []).map((s) => s.name);
+            setDraft((prev) => {
+              const next = { ...prev };
+              linkedSlotNames.forEach((name) => { delete next[name]; });
+              return next;
+            });
+            setCustomDraft((prev) => ({ ...prev, [linkedDayKey]: [] }));
+            setAddedDraft((prev) => ({ ...prev, [linkedDayKey]: [] }));
+            delete dayLiveWeekKeyRef.current[linkedDayKey];
+          }
+        }
+      }
     } catch (e) {
       setStorageError("Couldn't delete — try again.");
     }
@@ -1937,6 +2139,13 @@ export default function WorkoutTracker() {
                 </span>
               </div>
             </div>
+
+            {!backfill && hasCurrentWeekEntry && (
+              <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "0 16px 12px", fontSize: 11, color: "var(--text-muted)" }}>
+                <TrendingUp size={11} color="var(--accent)" />
+                Logged this week — edits will update your saved entry
+              </div>
+            )}
           </>
         )}
       </div>
@@ -2729,13 +2938,19 @@ export default function WorkoutTracker() {
             </button>
             <button onClick={saveWorkout} disabled={saving} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px", borderRadius: 10, background: savedFlash ? "var(--success)" : "var(--accent)", border: "none", cursor: "pointer", fontSize: 14, fontWeight: 700, color: "var(--on-accent)" }}>
               {saving ? <Loader2 size={16} /> : <Save size={16} />}
-              {savedFlash ? "Saved" : saving ? "Saving…" : `${backfill ? "Save Past Workout" : "Save Workout"} (${totalSets} set${totalSets > 1 ? "s" : ""})`}
+              {savedFlash
+                ? "Saved"
+                : saving
+                ? "Saving…"
+                : `${backfill ? "Save Past Workout" : hasCurrentWeekEntry ? "Update Workout" : "Save Workout"} (${totalSets} set${totalSets > 1 ? "s" : ""})`}
             </button>
           </div>
         </div>
       )}
       </>
       )}
+
+      <CompletionQuoteModal quote={completionQuote} onClose={() => setCompletionQuote(null)} />
     </div>
   );
 }
