@@ -1,5 +1,23 @@
-const CACHE = "ironlog-v3";
-const ASSETS = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
+const CACHE = "ironlog-v6";
+const ASSETS = [
+  "./",
+  "./index.html",
+  "./manifest.json",
+  "./icon-192.png",
+  "./icon-512.png",
+  "./apple-touch-icon.png",
+  "./splash-1290x2796.png",
+  "./splash-1179x2556.png",
+  "./splash-750x1334.png",
+  "./bg/home.webp",
+  "./bg/log.webp",
+  "./bg/history.webp",
+  "./bg/utility.webp",
+  "./quotes/gym-1.webp",
+  "./quotes/gym-2.webp",
+  "./quotes/gym-3.webp",
+  "./quotes/gym-4.webp",
+];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));

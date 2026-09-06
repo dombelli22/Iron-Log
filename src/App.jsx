@@ -35,6 +35,36 @@ function mondayOf(dateStr) {
 }
 const weekKeyFor = (dateStr) => mondayOf(dateStr);
 
+// Tweens a displayed number from its previous value to `target` whenever
+// `target` changes, instead of the stat just jumping — used for the header's
+// volume/hold-time counters so a save (or any set edit) feels less abrupt.
+function useCountUp(target, duration = 500) {
+  const [display, setDisplay] = useState(target);
+  const fromRef = useRef(target);
+  const rafRef = useRef(null);
+
+  useEffect(() => {
+    const from = fromRef.current;
+    if (from === target) return;
+    const start = performance.now();
+    cancelAnimationFrame(rafRef.current);
+    function tick(now) {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setDisplay(Math.round(from + (target - from) * eased));
+      if (t < 1) {
+        rafRef.current = requestAnimationFrame(tick);
+      } else {
+        fromRef.current = target;
+      }
+    }
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [target, duration]);
+
+  return display;
+}
+
 // Shown after a workout is saved. Real, attributed quotes only, majority
 // from bodybuilders/strongmen/other health-and-strength figures (historical
 // through current, on the app's own "building your body" theme, informal
@@ -94,6 +124,17 @@ const COMPLETION_QUOTES = [
   { quote: "There is nothing impossible to him who will try.", author: "Alexander the Great" },
   { quote: "Experience is the teacher of all things.", author: "Julius Caesar" },
 ];
+
+// Photos shown behind CompletionQuoteModal — old-school gym equipment and
+// gym settings only, deliberately not portraits of anyone (a specific
+// person's real training photo isn't available under any license that
+// allows embedding it here, and generic stock-model photos of "a
+// bodybuilder" read as a stand-in for a real named person in a way plain
+// equipment/interior shots don't). One is picked at random alongside the
+// quote itself each time a workout is saved. Shown at full opacity (not
+// dimmed the way the per-page backgrounds are) since these are meant to
+// stand out, not sit quietly behind content.
+const QUOTE_BG_IMAGES = ["/quotes/gym-1.webp", "/quotes/gym-2.webp", "/quotes/gym-3.webp", "/quotes/gym-4.webp"];
 
 // ---------------------------------------------------------------------------
 // Muscle map — every exercise tagged with the muscles it engages: primary
@@ -442,7 +483,9 @@ function recommendPlanId({ days, fiveDayStyle, sixDayStyle }) {
 const homeChoiceButtonStyle = {
   width: "100%", textAlign: "left", padding: "14px", borderRadius: 12, cursor: "pointer",
   background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)",
+  boxShadow: "0 2px 8px rgba(0,0,0,0.28)",
 };
+const PRIMARY_SHADOW = "0 4px 14px rgba(214,41,59,0.35)";
 
 function HomeScreen({ plans, activePlanId, onChoosePlan, onContinue, onStartBuild }) {
   const activePlan = plans.find((p) => p.id === activePlanId);
@@ -550,13 +593,13 @@ function HomeScreen({ plans, activePlanId, onChoosePlan, onContinue, onStartBuil
           Based on what you told us, this is the best fit — but every split is listed below too if you'd rather look around.
         </div>
         {recommendedPlan && (
-          <div style={{ padding: "16px", borderRadius: 12, background: "var(--accent-dim)", border: "1px solid var(--accent)", marginBottom: 14 }}>
+          <div style={{ padding: "16px", borderRadius: 12, background: "var(--accent-dim)", border: "1px solid var(--accent)", marginBottom: 14, boxShadow: "0 2px 8px rgba(0,0,0,0.28)" }}>
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
               <div className="display" style={{ fontSize: 16 }}>{recommendedPlan.name}</div>
               <div style={{ fontSize: 10, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{sessionCount}x/week</div>
             </div>
             <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 14 }}>{recommendedPlan.description}</div>
-            <button onClick={() => onChoosePlan(recommendedPlan.id)} style={{ width: "100%", padding: "11px", borderRadius: 8, fontSize: 13.5, fontWeight: 700, cursor: "pointer", border: "none", background: "var(--accent)", color: "var(--on-accent)" }}>
+            <button onClick={() => onChoosePlan(recommendedPlan.id)} style={{ width: "100%", padding: "11px", borderRadius: 8, fontSize: 13.5, fontWeight: 700, cursor: "pointer", border: "none", background: "var(--accent)", color: "var(--on-accent)", boxShadow: PRIMARY_SHADOW }}>
               Use This Plan
             </button>
           </div>
@@ -584,7 +627,7 @@ function HomeScreen({ plans, activePlanId, onChoosePlan, onContinue, onStartBuil
             return (
               <div
                 key={plan.id}
-                style={{ padding: "14px", borderRadius: 12, background: "var(--surface)", border: isActive ? "1px solid var(--accent)" : "1px solid var(--border)" }}
+                style={{ padding: "14px", borderRadius: 12, background: "var(--surface)", border: isActive ? "1px solid var(--accent)" : "1px solid var(--border)", boxShadow: "0 2px 8px rgba(0,0,0,0.28)" }}
               >
                 <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
                   <div className="display" style={{ fontSize: 14 }}>{plan.name}</div>
@@ -593,7 +636,7 @@ function HomeScreen({ plans, activePlanId, onChoosePlan, onContinue, onStartBuil
                 <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 12 }}>{plan.description}</div>
                 <button
                   onClick={() => onChoosePlan(plan.id)}
-                  style={{ width: "100%", padding: "9px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer", border: isActive ? "1px solid var(--border)" : "none", background: isActive ? "transparent" : "var(--accent)", color: isActive ? "var(--text-muted)" : "var(--on-accent)" }}
+                  style={{ width: "100%", padding: "9px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer", border: isActive ? "1px solid var(--border)" : "none", background: isActive ? "transparent" : "var(--accent)", color: isActive ? "var(--text-muted)" : "var(--on-accent)", boxShadow: isActive ? "none" : PRIMARY_SHADOW }}
                 >
                   {isActive ? "Restart This Plan" : "Use This Plan"}
                 </button>
@@ -616,7 +659,7 @@ function HomeScreen({ plans, activePlanId, onChoosePlan, onContinue, onStartBuil
       {activePlan && (
         <button
           onClick={onContinue}
-          style={{ width: "100%", textAlign: "left", padding: "16px", borderRadius: 12, background: "var(--accent-dim)", border: "1px solid var(--accent)", cursor: "pointer", marginBottom: 24, color: "var(--text)" }}
+          style={{ width: "100%", textAlign: "left", padding: "16px", borderRadius: 12, background: "var(--accent-dim)", border: "1px solid var(--accent)", cursor: "pointer", marginBottom: 24, color: "var(--text)", boxShadow: "0 2px 8px rgba(0,0,0,0.28)" }}
         >
           <div style={{ fontSize: 11, color: "var(--accent)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Continue</div>
           <div className="display" style={{ fontSize: 16 }}>{activePlan.name}</div>
@@ -627,7 +670,7 @@ function HomeScreen({ plans, activePlanId, onChoosePlan, onContinue, onStartBuil
         {activePlan ? "Switch Plan" : "Get Started"}
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <button onClick={startQuiz} style={{ width: "100%", textAlign: "left", padding: "16px", borderRadius: 12, background: "var(--accent)", border: "none", cursor: "pointer" }}>
+        <button onClick={startQuiz} style={{ width: "100%", textAlign: "left", padding: "16px", borderRadius: 12, background: "var(--accent)", border: "none", cursor: "pointer", boxShadow: PRIMARY_SHADOW }}>
           <div className="display" style={{ fontSize: 15, color: "var(--on-accent)" }}>Help Me Choose</div>
           <div style={{ fontSize: 12, color: "rgba(255,255,255,0.85)", marginTop: 3 }}>Answer a couple quick questions about your schedule and goals</div>
         </button>
@@ -696,7 +739,7 @@ function ScheduleScreen({ plan, schedule, onSave, onBack }) {
       <button
         onClick={() => onSave(draft)}
         disabled={assignedCount === 0}
-        style={{ width: "100%", marginTop: 20, padding: "13px", borderRadius: 10, background: assignedCount === 0 ? "var(--surface-2)" : "var(--accent)", border: "none", cursor: assignedCount === 0 ? "not-allowed" : "pointer", fontSize: 14, fontWeight: 700, color: assignedCount === 0 ? "var(--text-muted)" : "var(--on-accent)" }}
+        style={{ width: "100%", marginTop: 20, padding: "13px", borderRadius: 10, background: assignedCount === 0 ? "var(--surface-2)" : "var(--accent)", border: "none", cursor: assignedCount === 0 ? "not-allowed" : "pointer", fontSize: 14, fontWeight: 700, color: assignedCount === 0 ? "var(--text-muted)" : "var(--on-accent)", boxShadow: assignedCount === 0 ? "none" : PRIMARY_SHADOW }}
       >
         Save & Continue
       </button>
@@ -750,26 +793,82 @@ function AddPastWorkoutSetup({ plan, onStart, onBack }) {
   );
 }
 
+// Real photos (Unsplash License — free for any use, no attribution required),
+// downsampled to webp and stored locally rather than hotlinked, one per
+// "page family" so the app doesn't feel flat screen-to-screen. Fixed-position
+// and behind everything else (see PageBackground) so it reads as atmosphere,
+// not literal content — every real UI element still sits on its own solid
+// --surface card on top, so this never competes with anything readable.
+const BG_IMAGES = {
+  home: "/bg/home.webp",
+  log: "/bg/log.webp",
+  history: "/bg/history.webp",
+  utility: "/bg/utility.webp",
+};
+
+function PageBackground({ image }) {
+  const src = BG_IMAGES[image];
+  if (!src) return null;
+  return (
+    <div aria-hidden="true" style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none", overflow: "hidden" }}>
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          backgroundImage: `url(${src})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          opacity: 0.18,
+          filter: "grayscale(30%) contrast(1.05)",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          background:
+            "radial-gradient(ellipse 70% 45% at 50% 0%, rgba(214,41,59,0.16), transparent 60%), linear-gradient(to bottom, rgba(16,17,19,0.55) 0%, rgba(16,17,19,0.88) 45%, var(--bg) 100%)",
+        }}
+      />
+    </div>
+  );
+}
+
 // Shown right after a workout is saved (live or backfilled).
 function CompletionQuoteModal({ quote, onClose }) {
   if (!quote) return null;
+  const img = quote.img;
   return (
     <div
       onClick={onClose}
       style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
     >
-      <div onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420, width: "100%", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 16, padding: "28px 24px", textAlign: "center" }}>
-        <div className="display" style={{ fontSize: 11, color: "var(--accent)", letterSpacing: "0.1em", marginBottom: 18 }}>Workout Complete</div>
-        <div style={{ fontSize: 17, lineHeight: 1.55, color: "var(--text)", fontStyle: "italic", marginBottom: 14 }}>
-          &ldquo;{quote.quote}&rdquo;
+      <div onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420, width: "100%", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 16, overflow: "hidden", textAlign: "center" }}>
+        {img && (
+          <div style={{ position: "relative", height: 220 }}>
+            <img src={img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center", display: "block" }} />
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                background: "linear-gradient(to bottom, rgba(16,17,19,0) 0%, rgba(16,17,19,0.12) 45%, rgba(16,17,19,0.8) 85%, var(--surface) 100%)",
+              }}
+            />
+          </div>
+        )}
+        <div style={{ padding: img ? "12px 24px 28px" : "28px 24px", marginTop: img ? -8 : 0 }}>
+          <div className="display" style={{ fontSize: 11, color: "var(--accent)", letterSpacing: "0.1em", marginBottom: 18 }}>Workout Complete</div>
+          <div style={{ fontSize: 17, lineHeight: 1.55, color: "var(--text)", fontStyle: "italic", marginBottom: 14 }}>
+            &ldquo;{quote.quote}&rdquo;
+          </div>
+          <div className="display" style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 22 }}>— {quote.author}</div>
+          <button
+            onClick={onClose}
+            style={{ width: "100%", padding: "12px", borderRadius: 10, background: "var(--accent)", border: "none", cursor: "pointer", fontSize: 14, fontWeight: 700, color: "var(--on-accent)", boxShadow: PRIMARY_SHADOW }}
+          >
+            Continue
+          </button>
         </div>
-        <div className="display" style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 22 }}>— {quote.author}</div>
-        <button
-          onClick={onClose}
-          style={{ width: "100%", padding: "12px", borderRadius: 10, background: "var(--accent)", border: "none", cursor: "pointer", fontSize: 14, fontWeight: 700, color: "var(--on-accent)" }}
-        >
-          Continue
-        </button>
       </div>
     </div>
   );
@@ -957,7 +1056,7 @@ function BuildPlanScreen({ existingPlans, onSave, onCancel }) {
         <button
           onClick={() => setStep("days")}
           disabled={!planName.trim()}
-          style={{ width: "100%", padding: "13px", borderRadius: 10, background: !planName.trim() ? "var(--surface-2)" : "var(--accent)", border: "none", cursor: !planName.trim() ? "not-allowed" : "pointer", fontSize: 14, fontWeight: 700, color: !planName.trim() ? "var(--text-muted)" : "var(--on-accent)" }}
+          style={{ width: "100%", padding: "13px", borderRadius: 10, background: !planName.trim() ? "var(--surface-2)" : "var(--accent)", border: "none", cursor: !planName.trim() ? "not-allowed" : "pointer", fontSize: 14, fontWeight: 700, color: !planName.trim() ? "var(--text-muted)" : "var(--on-accent)", boxShadow: !planName.trim() ? "none" : PRIMARY_SHADOW }}
         >
           Next: Add Days
         </button>
@@ -993,7 +1092,7 @@ function BuildPlanScreen({ existingPlans, onSave, onCancel }) {
         <button
           onClick={() => onSave({ name: planName, days })}
           disabled={days.length === 0}
-          style={{ width: "100%", padding: "13px", borderRadius: 10, background: days.length === 0 ? "var(--surface-2)" : "var(--accent)", border: "none", cursor: days.length === 0 ? "not-allowed" : "pointer", fontSize: 14, fontWeight: 700, color: days.length === 0 ? "var(--text-muted)" : "var(--on-accent)" }}
+          style={{ width: "100%", padding: "13px", borderRadius: 10, background: days.length === 0 ? "var(--surface-2)" : "var(--accent)", border: "none", cursor: days.length === 0 ? "not-allowed" : "pointer", fontSize: 14, fontWeight: 700, color: days.length === 0 ? "var(--text-muted)" : "var(--on-accent)", boxShadow: days.length === 0 ? "none" : PRIMARY_SHADOW }}
         >
           Save & Finish
         </button>
@@ -1861,6 +1960,8 @@ export default function WorkoutTracker() {
     [sessionBlocks]
   );
   const totalSets = sessionBlocks.reduce((sum, b) => sum + b.sets.length, 0);
+  const animatedVolume = useCountUp(sessionVolume);
+  const animatedHoldTime = useCountUp(sessionHoldTime);
 
   function countForSlot(slotName) {
     return sessionBlocks.find((b) => b.slot === slotName)?.sets.length || 0;
@@ -1929,7 +2030,9 @@ export default function WorkoutTracker() {
         }
         setSavedFlash(true);
         setTimeout(() => setSavedFlash(false), 1800);
-        setCompletionQuote(COMPLETION_QUOTES[Math.floor(Math.random() * COMPLETION_QUOTES.length)]);
+        const pickedQuote = COMPLETION_QUOTES[Math.floor(Math.random() * COMPLETION_QUOTES.length)];
+        const pickedImg = QUOTE_BG_IMAGES[Math.floor(Math.random() * QUOTE_BG_IMAGES.length)];
+        setCompletionQuote({ ...pickedQuote, img: pickedImg });
       } else {
         setStorageError("Couldn't save — try again.");
       }
@@ -2023,8 +2126,15 @@ export default function WorkoutTracker() {
     return null;
   }
 
+  // Which background photo shows depends on the broad "page family" on
+  // screen, not the exact screen — schedule/build/backfill-setup share one
+  // (they're all secondary setup flows) so this stays 4 images, not 6+.
+  const bgImage =
+    screen === "home" ? "home" : screen === "app" ? (view === "history" ? "history" : "log") : "utility";
+
   return (
     <div style={{ background: "var(--bg)", minHeight: "100%", color: "var(--text)", fontFamily: "'Inter', sans-serif" }}>
+      <PageBackground image={bgImage} />
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Metal+Mania&family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap');
         :root {
@@ -2052,6 +2162,7 @@ export default function WorkoutTracker() {
         @keyframes pop { 0% { transform: scale(1); } 40% { transform: scale(1.06); } 100% { transform: scale(1); } }
       `}</style>
 
+      <div style={{ position: "relative", zIndex: 1 }}>
       {screen === "home" && (
         <HomeScreen plans={allPlans} activePlanId={selectedPlanId} onChoosePlan={choosePlan} onContinue={continueWithCurrentPlan} onStartBuild={startBuildPlan} />
       )}
@@ -2129,12 +2240,12 @@ export default function WorkoutTracker() {
               <div key={`${sessionVolume}-${sessionHoldTime}`} className={sessionBlocks.length > 0 ? "flash-pop" : ""} style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
                 {sessionHoldTime > 0 && (
                   <span style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
-                    <span className="display tabular" style={{ fontSize: 16, color: "var(--time)" }}>{sessionHoldTime}</span>
+                    <span className="display tabular" style={{ fontSize: 16, color: "var(--time)" }}>{animatedHoldTime}</span>
                     <span style={{ fontSize: 9, color: "var(--text-muted)", textTransform: "uppercase" }}>s hold</span>
                   </span>
                 )}
                 <span style={{ display: "flex", alignItems: "baseline", gap: 5 }}>
-                  <span className="display tabular" style={{ fontSize: 22, color: "var(--accent)" }}>{sessionVolume.toLocaleString()}</span>
+                  <span className="display tabular" style={{ fontSize: 22, color: "var(--accent)" }}>{animatedVolume.toLocaleString()}</span>
                   <span style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase" }}>lb vol</span>
                 </span>
               </div>
@@ -2936,7 +3047,7 @@ export default function WorkoutTracker() {
             <button onClick={discardSession} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 44, borderRadius: 10, background: "var(--surface)", border: "1px solid var(--border)", cursor: "pointer" }}>
               <RotateCcw size={16} color="var(--text-muted)" />
             </button>
-            <button onClick={saveWorkout} disabled={saving} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px", borderRadius: 10, background: savedFlash ? "var(--success)" : "var(--accent)", border: "none", cursor: "pointer", fontSize: 14, fontWeight: 700, color: "var(--on-accent)" }}>
+            <button onClick={saveWorkout} disabled={saving} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px", borderRadius: 10, background: savedFlash ? "var(--success)" : "var(--accent)", border: "none", cursor: "pointer", fontSize: 14, fontWeight: 700, color: "var(--on-accent)", boxShadow: savedFlash ? "0 4px 14px rgba(111,207,151,0.35)" : PRIMARY_SHADOW }}>
               {saving ? <Loader2 size={16} /> : <Save size={16} />}
               {savedFlash
                 ? "Saved"
@@ -2951,6 +3062,7 @@ export default function WorkoutTracker() {
       )}
 
       <CompletionQuoteModal quote={completionQuote} onClose={() => setCompletionQuote(null)} />
+      </div>
     </div>
   );
 }
