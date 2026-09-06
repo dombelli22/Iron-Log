@@ -11,6 +11,7 @@
   "dependencies": {
     "lucide-react": "^1.41.0",
     "react": "^19.2.8",
+    "react-body-highlighter": "^2.0.5",
     "react-dom": "^19.2.8"
   },
   "devDependencies": {

@@ -1,90 +1,8 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Dumbbell, Plus, Trash2, ChevronDown, Save, X, Loader2, History as HistoryIcon, RotateCcw, Timer, TrendingUp, Layers } from "lucide-react";
+import { Dumbbell, Plus, Trash2, ChevronDown, Save, X, Loader2, History as HistoryIcon, RotateCcw, Timer, TrendingUp, Layers, Home as HomeIcon, Calendar as CalendarIcon } from "lucide-react";
 import { storage } from "./storage";
-
-// ---------------------------------------------------------------------------
-// Data model — pulled directly from the 6-day split document.
-// Each exercise carries: type ("reps" | "time") and equip ("Barbell" |
-// "EZ-Bar" | "Dumbbell" | "Cable" | "Machine" | "Bodyweight"), which
-// together decide which inputs render and which weight list populates
-// the dropdown.
-// ---------------------------------------------------------------------------
-const R = (name, equip) => ({ name, type: "reps", equip });
-const T = (name, equip) => ({ name, type: "time", equip });
-
-const WORKOUT_DATA = {
-  Monday: {
-    label: "Push",
-    subtitle: "Chest, Triceps, Front Delts",
-    slots: [
-      { name: "Chest — Upper", exercises: [R("Machine Incline Press", "Machine"), R("Incline DB Press", "Dumbbell"), R("Incline Barbell Press", "Barbell"), R("Incline DB Fly", "Dumbbell"), R("Incline Cable Fly", "Cable")] },
-      { name: "Chest — Middle", exercises: [R("Flat Barbell Press", "Barbell"), R("Flat DB Press", "Dumbbell"), R("Flat DB Fly", "Dumbbell"), R("Flat Cable Fly", "Cable")] },
-      { name: "Chest — Lower", exercises: [R("Decline DB Fly", "Dumbbell"), R("Decline Cable Fly", "Cable"), R("Decline DB Press", "Dumbbell"), R("Decline Barbell Press", "Barbell")] },
-      { name: "Triceps — Long Head", exercises: [R("Overhead DB Extension", "Dumbbell"), R("Overhead Cable Extension", "Cable")] },
-      { name: "Triceps — Lateral Head", exercises: [R("Single-Arm Cable Pushdown", "Cable"), R("Rope or Bar Pushdown", "Cable")] },
-      { name: "Triceps — Medial Head", exercises: [R("Close-Grip Barbell Bench Press", "Barbell"), R("Close-Grip DB Bench Press", "Dumbbell")] },
-      { name: "Front Delts", exercises: [R("Cable Front Raise", "Cable"), R("DB Front Raise", "Dumbbell")] },
-    ],
-  },
-  Tuesday: {
-    label: "Pull",
-    subtitle: "Back, Biceps, Rear Delts",
-    slots: [
-      { name: "Back — Width", exercises: [R("Lat Pulldown", "Cable"), R("Single-Arm Lat Pulldown", "Cable"), R("Pull-Up", "Bodyweight")] },
-      { name: "Back — Thickness", exercises: [R("Barbell Row", "Barbell"), R("DB Row", "Dumbbell"), R("Seated Cable Row", "Cable"), R("Single-Arm Cable Row", "Cable")] },
-      { name: "Back — Lower Lat / Traps", exercises: [R("Barbell Deadlift", "Barbell"), R("DB Deadlift", "Dumbbell"), R("Straight-Arm Pulldown", "Cable")] },
-      { name: "Biceps — Long Head", exercises: [R("Bayesian Curl", "Cable"), R("Incline DB Curl", "Dumbbell")] },
-      { name: "Biceps — Short Head", exercises: [R("Preacher Curl", "EZ-Bar"), R("Spider Curl", "Dumbbell"), R("Cable Preacher Curl", "Cable")] },
-      { name: "Biceps — Brachialis", exercises: [R("DB Hammer Curl", "Dumbbell"), R("Cable Hammer Curl", "Cable"), R("Cross-Body Hammer Curl", "Dumbbell")] },
-      { name: "Rear Delts", exercises: [R("Reverse Pec Deck", "Machine"), R("Face Pull", "Cable"), R("DB Reverse Fly", "Dumbbell"), R("Cable Reverse Fly", "Cable")] },
-    ],
-  },
-  Wednesday: {
-    label: "Legs",
-    subtitle: "Compound Focus",
-    slots: [
-      { name: "Quads — Primary", exercises: [R("Back Squat", "Barbell"), R("Front Squat", "Barbell"), R("Goblet Squat", "Dumbbell")] },
-      { name: "Quads — Secondary", exercises: [R("Leg Press", "Machine"), R("Goblet Squat", "Dumbbell")] },
-      { name: "Hamstrings", exercises: [R("Barbell RDL", "Barbell"), R("DB RDL", "Dumbbell")] },
-      { name: "Glutes", exercises: [R("Bulgarian Split Squat", "Dumbbell"), R("Walking Lunges", "Dumbbell")] },
-      { name: "Calves", exercises: [R("Standing Calf Raise", "Machine"), R("Single-Leg Calf Raise", "Dumbbell")] },
-    ],
-  },
-  Friday: {
-    label: "Upper",
-    subtitle: "Chest, Back, Arms, Shoulders",
-    slots: [
-      { name: "Chest — Upper", exercises: [R("Incline DB Press", "Dumbbell"), R("Incline Barbell Press", "Barbell"), R("Incline DB Fly", "Dumbbell"), R("Incline Cable Fly", "Cable")] },
-      { name: "Chest — Middle", exercises: [R("Flat DB Fly", "Dumbbell"), R("Flat Cable Fly", "Cable"), R("Machine Chest Press", "Machine")] },
-      { name: "Chest — Lower", exercises: [R("Machine Decline Press", "Machine"), R("Decline DB Press", "Dumbbell"), R("Decline Cable Fly", "Cable")] },
-      { name: "Back — Width", exercises: [R("Neutral-Grip Pull-Up", "Bodyweight"), R("Lat Pulldown", "Cable"), R("Single-Arm Lat Pulldown", "Cable")] },
-      { name: "Back — Thickness", exercises: [R("Chest-Supported DB Row", "Dumbbell"), R("Chest-Supported Barbell/T-Bar Row", "Barbell")] },
-      { name: "Shoulders — Front/Mid", exercises: [R("Seated DB Overhead Press", "Dumbbell"), R("Seated Barbell Overhead Press", "Barbell"), R("Cable Overhead Press", "Cable")] },
-      { name: "Shoulders — Side", exercises: [R("Cable Lateral Raise", "Cable"), R("DB Lateral Raise", "Dumbbell")] },
-      { name: "Shoulders — Rear", exercises: [R("Bent-Over DB Rear Delt Fly", "Dumbbell"), R("Cable Rear Delt Fly", "Cable")] },
-      { name: "Arms — Biceps", exercises: [R("Barbell or EZ-Bar Curl", "EZ-Bar"), R("DB Curl", "Dumbbell"), R("Cable Curl", "Cable")] },
-      { name: "Arms — Triceps", exercises: [R("Barbell or EZ-Bar Skull Crushers", "EZ-Bar"), R("DB Skull Crushers", "Dumbbell")] },
-    ],
-  },
-  Saturday: {
-    label: "Lower",
-    subtitle: "Machine Isolation or Isometric Hold",
-    slots: [
-      { name: "Quads", exercises: [R("Leg Extension Machine", "Machine"), T("Wall Sit", "Bodyweight")] },
-      { name: "Hamstrings", exercises: [R("Leg Curl Machine", "Machine"), T("Single-Leg RDL Hold", "Bodyweight")] },
-      { name: "Glute Medius / Abductors", exercises: [R("Hip Abductor Machine", "Machine"), T("Side-Lying Hip Abduction Hold", "Bodyweight")] },
-      { name: "Adductors", exercises: [R("Hip Adductor Machine", "Machine"), T("Copenhagen Plank Hold", "Bodyweight")] },
-      { name: "Calves", exercises: [R("Barbell Calf Raise", "Barbell"), R("Single-Leg DB Calf Raise", "Dumbbell"), T("Calf Raise Hold", "Bodyweight")] },
-    ],
-  },
-};
-
-const DAY_ORDER = ["Monday", "Tuesday", "Wednesday", "Friday", "Saturday"];
-
-const todayName = () => {
-  const n = new Date().toLocaleDateString("en-US", { weekday: "long" });
-  return DAY_ORDER.includes(n) ? n : "Monday";
-};
+import { PLAN_LIBRARY, ALL_DAYS_BY_KEY, WEEKDAYS, getScheduledDay, GLOBAL_SLOT_LIBRARY, GLOBAL_SLOT_NAMES, GLOBAL_EXERCISE_LIST } from "./plans";
+import BodyModel from "react-body-highlighter";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -93,73 +11,17 @@ const fmtDate = (iso) => {
   return new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 };
 
-function getSlot(day, slotName) {
-  return WORKOUT_DATA[day].slots.find((s) => s.name === slotName);
-}
-function getExercise(day, slotName, exerciseName) {
-  const slot = getSlot(day, slotName);
-  return slot?.exercises.find((e) => e.name === exerciseName);
-}
-function getExerciseType(day, slotName, exerciseName) {
-  return getExercise(day, slotName, exerciseName)?.type || "reps";
-}
-function getExerciseEquip(day, slotName, exerciseName) {
-  return getExercise(day, slotName, exerciseName)?.equip || "Dumbbell";
-}
-
-// ---------------------------------------------------------------------------
-// Whole-plan exercise library — every slot name mapped to the union of every
-// exercise ever listed under it, across all days. Powers "add an existing
-// exercise" (pull from the plan) independent of which day you're viewing.
-// Body parts group slot names by their prefix (e.g. "Chest — Upper" -> "Chest").
-// ---------------------------------------------------------------------------
-const SLOT_EXERCISE_LIBRARY = {};
-Object.values(WORKOUT_DATA).forEach((dayObj) => {
-  dayObj.slots.forEach((slot) => {
-    if (!SLOT_EXERCISE_LIBRARY[slot.name]) SLOT_EXERCISE_LIBRARY[slot.name] = [];
-    slot.exercises.forEach((ex) => {
-      if (!SLOT_EXERCISE_LIBRARY[slot.name].some((e) => e.name === ex.name)) SLOT_EXERCISE_LIBRARY[slot.name].push(ex);
-    });
-  });
-});
-const BODY_PARTS = {};
-Object.keys(SLOT_EXERCISE_LIBRARY).forEach((slotName) => {
-  const part = slotName.includes(" — ") ? slotName.split(" — ")[0] : slotName;
-  if (!BODY_PARTS[part]) BODY_PARTS[part] = [];
-  if (!BODY_PARTS[part].includes(slotName)) BODY_PARTS[part].push(slotName);
-});
-function getExerciseFromLibrary(slotName, exerciseName) {
-  return (SLOT_EXERCISE_LIBRARY[slotName] || []).find((e) => e.name === exerciseName);
-}
-
 const emptyRow = () => ({ weight: "", value: "", extra: null });
 const emptyExtra = () => ({ type: "superset", exercise: "", weight: "", value: "" });
 
-// Dropdown option generators
+// Dropdown option generator (reps only — weight is manual entry since it
+// varies by machine/gym).
 function range(start, end, step) {
   const out = [];
   for (let w = start; w <= end + 1e-9; w += step) out.push(Math.round(w * 100) / 100);
   return out;
 }
-const BARBELL_WEIGHTS = range(45, 495, 5); // 45lb bar, 2.5lb plates/side = 5lb jumps
-const EZBAR_WEIGHTS = range(20, 150, 5); // 20lb EZ curl bar, 5lb jumps
-const DUMBBELL_WEIGHTS = range(5, 150, 5); // typical commercial rack
-const STACK_WEIGHTS = range(2.5, 250, 2.5); // cable & machine stacks vary — fine-grained
-const BODYWEIGHT_ADDED = [0, ...range(5, 100, 5)]; // 0 = bodyweight, then added weight
 const REPS_OPTIONS = range(1, 20, 1);
-const FIVE_LB_EQUIP = new Set(["Barbell", "EZ-Bar", "Dumbbell", "Bodyweight"]);
-
-function weightOptionsFor(equip) {
-  switch (equip) {
-    case "Barbell": return BARBELL_WEIGHTS;
-    case "EZ-Bar": return EZBAR_WEIGHTS;
-    case "Dumbbell": return DUMBBELL_WEIGHTS;
-    case "Cable": return STACK_WEIGHTS;
-    case "Machine": return STACK_WEIGHTS;
-    case "Bodyweight": return BODYWEIGHT_ADDED;
-    default: return DUMBBELL_WEIGHTS;
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Muscle map — every exercise tagged with the muscles it engages: primary
@@ -172,53 +34,85 @@ const MUSCLE_MAP = {
   "Incline Barbell Press": { primary: ["chest"], secondary: ["frontDelt", "triceps"], detail: { muscle: "chest", region: "upper" } },
   "Incline DB Fly": { primary: ["chest"], secondary: ["frontDelt"], detail: { muscle: "chest", region: "upper" } },
   "Incline Cable Fly": { primary: ["chest"], secondary: ["frontDelt"], detail: { muscle: "chest", region: "upper" } },
+  "Incline Machine Fly": { primary: ["chest"], secondary: ["frontDelt"], detail: { muscle: "chest", region: "upper" } },
+  "Decline Push-Up": { primary: ["chest"], secondary: ["frontDelt", "triceps"], detail: { muscle: "chest", region: "upper" } },
   "Flat Barbell Press": { primary: ["chest"], secondary: ["frontDelt", "triceps"], detail: { muscle: "chest", region: "middle" } },
   "Flat DB Press": { primary: ["chest"], secondary: ["frontDelt", "triceps"], detail: { muscle: "chest", region: "middle" } },
   "Flat DB Fly": { primary: ["chest"], secondary: ["frontDelt"], detail: { muscle: "chest", region: "middle" } },
   "Flat Cable Fly": { primary: ["chest"], secondary: ["frontDelt"], detail: { muscle: "chest", region: "middle" } },
+  "Pec Deck Fly": { primary: ["chest"], secondary: ["frontDelt"], detail: { muscle: "chest", region: "middle" } },
+  "Push-Up": { primary: ["chest"], secondary: ["frontDelt", "triceps"], detail: { muscle: "chest", region: "middle" } },
   "Decline DB Fly": { primary: ["chest"], secondary: ["frontDelt"], detail: { muscle: "chest", region: "lower" } },
   "Decline Cable Fly": { primary: ["chest"], secondary: ["frontDelt"], detail: { muscle: "chest", region: "lower" } },
   "Decline DB Press": { primary: ["chest"], secondary: ["triceps", "frontDelt"], detail: { muscle: "chest", region: "lower" } },
   "Decline Barbell Press": { primary: ["chest"], secondary: ["triceps", "frontDelt"], detail: { muscle: "chest", region: "lower" } },
   "Machine Chest Press": { primary: ["chest"], secondary: ["frontDelt", "triceps"], detail: { muscle: "chest", region: "middle" } },
   "Machine Decline Press": { primary: ["chest"], secondary: ["triceps", "frontDelt"], detail: { muscle: "chest", region: "lower" } },
-
+  "Chest Dip": { primary: ["chest"], secondary: ["triceps", "frontDelt"], detail: { muscle: "chest", region: "lower" } },
+  "Incline Push-Up": { primary: ["chest"], secondary: ["frontDelt", "triceps"], detail: { muscle: "chest", region: "lower" } },
   "Overhead DB Extension": { primary: ["triceps"], secondary: [], detail: { muscle: "triceps", region: "long" } },
   "Overhead Cable Extension": { primary: ["triceps"], secondary: [], detail: { muscle: "triceps", region: "long" } },
+  "Overhead EZ-Bar Extension": { primary: ["triceps"], secondary: [], detail: { muscle: "triceps", region: "long" } },
+  "Overhead Barbell Extension": { primary: ["triceps"], secondary: [], detail: { muscle: "triceps", region: "long" } },
   "Single-Arm Cable Pushdown": { primary: ["triceps"], secondary: [], detail: { muscle: "triceps", region: "lateral" } },
   "Rope or Bar Pushdown": { primary: ["triceps"], secondary: [], detail: { muscle: "triceps", region: "lateral" } },
+  "V-Bar Pushdown": { primary: ["triceps"], secondary: [], detail: { muscle: "triceps", region: "lateral" } },
+  "Machine Triceps Extension": { primary: ["triceps"], secondary: [], detail: { muscle: "triceps", region: "lateral" } },
+  "Bench Dip": { primary: ["triceps"], secondary: ["chest", "frontDelt"], detail: { muscle: "triceps", region: "lateral" } },
   "Close-Grip Barbell Bench Press": { primary: ["triceps"], secondary: ["chest", "frontDelt"], detail: { muscle: "triceps", region: "medial" } },
   "Close-Grip DB Bench Press": { primary: ["triceps"], secondary: ["chest", "frontDelt"], detail: { muscle: "triceps", region: "medial" } },
-  "DB Skull Crushers": { primary: ["triceps"], secondary: [], detail: { muscle: "triceps", region: "long" } },
-  "Barbell or EZ-Bar Skull Crushers": { primary: ["triceps"], secondary: [], detail: { muscle: "triceps", region: "long" } },
-
+  "Reverse-Grip Cable Pushdown": { primary: ["triceps"], secondary: [], detail: { muscle: "triceps", region: "medial" } },
+  "Diamond Push-Up": { primary: ["triceps"], secondary: ["chest", "frontDelt"], detail: { muscle: "triceps", region: "medial" } },
+  "DB Skull Crushers": { primary: ["triceps"], secondary: [], detail: { muscle: "triceps", region: "medial" } },
+  "Barbell or EZ-Bar Skull Crushers": { primary: ["triceps"], secondary: [], detail: { muscle: "triceps", region: "medial" } },
   "Cable Front Raise": { primary: ["frontDelt"], secondary: [] },
   "DB Front Raise": { primary: ["frontDelt"], secondary: [] },
+  "Barbell Front Raise": { primary: ["frontDelt"], secondary: [] },
+  "Incline DB Front Raise": { primary: ["frontDelt"], secondary: [] },
 
   "Lat Pulldown": { primary: ["lats"], secondary: ["biceps", "midBack"] },
+  "Wide-Grip Lat Pulldown": { primary: ["lats"], secondary: ["biceps", "midBack"] },
+  "Close-Grip Lat Pulldown": { primary: ["lats"], secondary: ["biceps", "midBack"] },
   "Single-Arm Lat Pulldown": { primary: ["lats"], secondary: ["biceps"] },
   "Pull-Up": { primary: ["lats"], secondary: ["biceps", "midBack"] },
+  "Chin-Up": { primary: ["lats"], secondary: ["biceps", "midBack"] },
   "Neutral-Grip Pull-Up": { primary: ["lats"], secondary: ["biceps", "midBack"] },
 
   "Barbell Row": { primary: ["midBack"], secondary: ["lats", "biceps", "rearDelt"] },
+  "Pendlay Row": { primary: ["midBack"], secondary: ["lats", "biceps", "rearDelt"] },
   "DB Row": { primary: ["midBack"], secondary: ["lats", "biceps"] },
   "Seated Cable Row": { primary: ["midBack"], secondary: ["lats", "biceps"] },
   "Single-Arm Cable Row": { primary: ["midBack"], secondary: ["lats", "biceps"] },
   "Chest-Supported DB Row": { primary: ["midBack"], secondary: ["lats", "biceps", "rearDelt"] },
   "Chest-Supported Barbell/T-Bar Row": { primary: ["midBack"], secondary: ["lats", "biceps", "rearDelt"] },
+  "T-Bar Row": { primary: ["midBack"], secondary: ["lats", "biceps", "rearDelt"] },
+  "Machine Row": { primary: ["midBack"], secondary: ["lats", "biceps"] },
+  "Inverted Row": { primary: ["midBack"], secondary: ["lats", "biceps", "rearDelt"] },
 
   "Barbell Deadlift": { primary: ["lowerBack"], secondary: ["hamstrings", "glutes", "traps", "lats"] },
+  "Rack Pull": { primary: ["lowerBack"], secondary: ["hamstrings", "glutes", "traps", "lats"] },
   "DB Deadlift": { primary: ["lowerBack"], secondary: ["hamstrings", "glutes", "traps"] },
   "Straight-Arm Pulldown": { primary: ["lats"], secondary: [] },
+  "Cable Pullover": { primary: ["lats"], secondary: ["chest", "triceps"] },
+  "DB Pullover": { primary: ["lats"], secondary: ["chest", "triceps"] },
+  "Barbell Shrug": { primary: ["traps"], secondary: [] },
+  "DB Shrug": { primary: ["traps"], secondary: [] },
 
   "Bayesian Curl": { primary: ["biceps"], secondary: [], detail: { muscle: "biceps", region: "long" } },
   "Incline DB Curl": { primary: ["biceps"], secondary: [], detail: { muscle: "biceps", region: "long" } },
+  "Standing Barbell Curl": { primary: ["biceps"], secondary: ["forearm"], detail: { muscle: "biceps", region: "long" } },
+  "Cross-Body Cable Curl": { primary: ["biceps"], secondary: [], detail: { muscle: "biceps", region: "long" } },
   "Preacher Curl": { primary: ["biceps"], secondary: [], detail: { muscle: "biceps", region: "short" } },
   "Spider Curl": { primary: ["biceps"], secondary: [], detail: { muscle: "biceps", region: "short" } },
   "Cable Preacher Curl": { primary: ["biceps"], secondary: [], detail: { muscle: "biceps", region: "short" } },
+  "Concentration Curl": { primary: ["biceps"], secondary: [], detail: { muscle: "biceps", region: "short" } },
+  "Wide-Grip EZ-Bar Curl": { primary: ["biceps"], secondary: [], detail: { muscle: "biceps", region: "short" } },
+  "Machine Preacher Curl": { primary: ["biceps"], secondary: [], detail: { muscle: "biceps", region: "short" } },
   "DB Hammer Curl": { primary: ["biceps"], secondary: ["forearm"], detail: { muscle: "biceps", region: "brachialis" } },
   "Cable Hammer Curl": { primary: ["biceps"], secondary: ["forearm"], detail: { muscle: "biceps", region: "brachialis" } },
   "Cross-Body Hammer Curl": { primary: ["biceps"], secondary: ["forearm"], detail: { muscle: "biceps", region: "brachialis" } },
+  "Reverse-Grip Barbell Curl": { primary: ["biceps"], secondary: ["forearm"], detail: { muscle: "biceps", region: "brachialis" } },
+  "Reverse-Grip EZ-Bar Curl": { primary: ["biceps"], secondary: ["forearm"], detail: { muscle: "biceps", region: "brachialis" } },
   "Barbell or EZ-Bar Curl": { primary: ["biceps"], secondary: [] },
   "DB Curl": { primary: ["biceps"], secondary: [] },
   "Cable Curl": { primary: ["biceps"], secondary: [] },
@@ -228,26 +122,47 @@ const MUSCLE_MAP = {
   "DB Reverse Fly": { primary: ["rearDelt"], secondary: [] },
   "Cable Reverse Fly": { primary: ["rearDelt"], secondary: [] },
   "Bent-Over DB Rear Delt Fly": { primary: ["rearDelt"], secondary: [] },
+  "Incline DB Rear Delt Fly": { primary: ["rearDelt"], secondary: [] },
 
   "Seated DB Overhead Press": { primary: ["frontDelt", "sideDelt"], secondary: ["triceps"] },
   "Seated Barbell Overhead Press": { primary: ["frontDelt", "sideDelt"], secondary: ["triceps"] },
+  "Standing Barbell Overhead Press": { primary: ["frontDelt", "sideDelt"], secondary: ["triceps"] },
   "Cable Overhead Press": { primary: ["frontDelt", "sideDelt"], secondary: ["triceps"] },
+  "Machine Shoulder Press": { primary: ["frontDelt", "sideDelt"], secondary: ["triceps"] },
+  "Arnold Press": { primary: ["frontDelt", "sideDelt"], secondary: ["triceps"] },
 
   "Cable Lateral Raise": { primary: ["sideDelt"], secondary: [] },
   "DB Lateral Raise": { primary: ["sideDelt"], secondary: [] },
+  "Machine Lateral Raise": { primary: ["sideDelt"], secondary: [] },
+  "Incline DB Lateral Raise": { primary: ["sideDelt"], secondary: [] },
+  "Upright Row": { primary: ["sideDelt"], secondary: ["traps", "biceps"] },
 
   "Back Squat": { primary: ["quads"], secondary: ["glutes", "hamstrings", "lowerBack"] },
   "Front Squat": { primary: ["quads"], secondary: ["glutes", "lowerBack"] },
   "Goblet Squat": { primary: ["quads"], secondary: ["glutes"] },
+  "Hack Squat": { primary: ["quads"], secondary: ["glutes"] },
+  "Sissy Squat": { primary: ["quads"], secondary: [] },
   "Leg Press": { primary: ["quads"], secondary: ["glutes", "hamstrings"] },
   "Barbell RDL": { primary: ["hamstrings"], secondary: ["glutes", "lowerBack"] },
   "DB RDL": { primary: ["hamstrings"], secondary: ["glutes", "lowerBack"] },
+  "Good Morning": { primary: ["hamstrings"], secondary: ["glutes", "lowerBack"] },
+  "Nordic Ham Curl": { primary: ["hamstrings"], secondary: [] },
+  "Seated Leg Curl Machine": { primary: ["hamstrings"], secondary: [] },
+  "Lying Leg Curl Machine": { primary: ["hamstrings"], secondary: [] },
   "Bulgarian Split Squat": { primary: ["quads"], secondary: ["glutes", "hamstrings"] },
   "Walking Lunges": { primary: ["quads"], secondary: ["glutes", "hamstrings"] },
+  "Hip Thrust": { primary: ["glutes"], secondary: ["hamstrings"] },
+  "Cable Kickback": { primary: ["glutes"], secondary: [] },
+  "Glute Bridge": { primary: ["glutes"], secondary: ["hamstrings"] },
+  "Cable Pull-Through": { primary: ["glutes"], secondary: ["hamstrings", "lowerBack"] },
+  "Cable Hip Abduction": { primary: ["abductors"], secondary: [] },
+  "Cable Hip Adduction": { primary: ["adductors"], secondary: [] },
+  "Sumo Squat": { primary: ["adductors"], secondary: ["quads", "glutes"] },
   "Standing Calf Raise": { primary: ["calves"], secondary: [] },
-  "Single-Leg Calf Raise": { primary: ["calves"], secondary: [] },
   "Single-Leg DB Calf Raise": { primary: ["calves"], secondary: [] },
   "Barbell Calf Raise": { primary: ["calves"], secondary: [] },
+  "Seated Calf Raise": { primary: ["calves"], secondary: [] },
+  "Leg Press Calf Raise": { primary: ["calves"], secondary: [] },
   "Leg Extension Machine": { primary: ["quads"], secondary: [] },
   "Leg Curl Machine": { primary: ["hamstrings"], secondary: [] },
   "Hip Abductor Machine": { primary: ["abductors"], secondary: [] },
@@ -267,29 +182,44 @@ const MUSCLE_MAP = {
 const RANGE_BY_TYPE = { compound: [6, 10], isolation: [10, 15] };
 const REP_RANGE_TYPE = {
   "Machine Incline Press": "compound", "Incline DB Press": "compound", "Incline Barbell Press": "compound",
-  "Incline DB Fly": "isolation", "Incline Cable Fly": "isolation",
+  "Incline DB Fly": "isolation", "Incline Cable Fly": "isolation", "Incline Machine Fly": "isolation", "Decline Push-Up": "compound",
   "Flat Barbell Press": "compound", "Flat DB Press": "compound", "Flat DB Fly": "isolation", "Flat Cable Fly": "isolation",
+  "Pec Deck Fly": "isolation", "Push-Up": "compound",
   "Decline DB Fly": "isolation", "Decline Cable Fly": "isolation", "Decline DB Press": "compound", "Decline Barbell Press": "compound",
-  "Machine Chest Press": "compound", "Machine Decline Press": "compound",
-  "Overhead DB Extension": "isolation", "Overhead Cable Extension": "isolation",
-  "Single-Arm Cable Pushdown": "isolation", "Rope or Bar Pushdown": "isolation",
+  "Machine Chest Press": "compound", "Machine Decline Press": "compound", "Chest Dip": "compound", "Incline Push-Up": "compound",
+  "Overhead DB Extension": "isolation", "Overhead Cable Extension": "isolation", "Overhead EZ-Bar Extension": "isolation", "Overhead Barbell Extension": "isolation",
+  "Single-Arm Cable Pushdown": "isolation", "Rope or Bar Pushdown": "isolation", "V-Bar Pushdown": "isolation",
+  "Machine Triceps Extension": "isolation", "Bench Dip": "isolation",
   "Close-Grip Barbell Bench Press": "compound", "Close-Grip DB Bench Press": "compound",
+  "Reverse-Grip Cable Pushdown": "isolation", "Diamond Push-Up": "compound",
   "DB Skull Crushers": "isolation", "Barbell or EZ-Bar Skull Crushers": "isolation",
-  "Cable Front Raise": "isolation", "DB Front Raise": "isolation",
-  "Lat Pulldown": "compound", "Single-Arm Lat Pulldown": "compound", "Pull-Up": "compound", "Neutral-Grip Pull-Up": "compound",
-  "Barbell Row": "compound", "DB Row": "compound", "Seated Cable Row": "compound", "Single-Arm Cable Row": "compound",
+  "Cable Front Raise": "isolation", "DB Front Raise": "isolation", "Barbell Front Raise": "isolation", "Incline DB Front Raise": "isolation",
+  "Lat Pulldown": "compound", "Wide-Grip Lat Pulldown": "compound", "Close-Grip Lat Pulldown": "compound",
+  "Single-Arm Lat Pulldown": "compound", "Pull-Up": "compound", "Chin-Up": "compound", "Neutral-Grip Pull-Up": "compound",
+  "Barbell Row": "compound", "Pendlay Row": "compound", "DB Row": "compound", "Seated Cable Row": "compound", "Single-Arm Cable Row": "compound",
   "Chest-Supported DB Row": "compound", "Chest-Supported Barbell/T-Bar Row": "compound",
-  "Barbell Deadlift": "compound", "DB Deadlift": "compound", "Straight-Arm Pulldown": "isolation",
-  "Bayesian Curl": "isolation", "Incline DB Curl": "isolation", "Preacher Curl": "isolation", "Spider Curl": "isolation",
+  "T-Bar Row": "compound", "Machine Row": "compound", "Inverted Row": "compound",
+  "Barbell Deadlift": "compound", "Rack Pull": "compound", "DB Deadlift": "compound", "Straight-Arm Pulldown": "isolation",
+  "Cable Pullover": "isolation", "DB Pullover": "isolation", "Barbell Shrug": "isolation", "DB Shrug": "isolation",
+  "Bayesian Curl": "isolation", "Incline DB Curl": "isolation", "Standing Barbell Curl": "isolation", "Cross-Body Cable Curl": "isolation",
+  "Preacher Curl": "isolation", "Spider Curl": "isolation", "Concentration Curl": "isolation", "Wide-Grip EZ-Bar Curl": "isolation", "Machine Preacher Curl": "isolation",
   "Cable Preacher Curl": "isolation", "DB Hammer Curl": "isolation", "Cable Hammer Curl": "isolation", "Cross-Body Hammer Curl": "isolation",
+  "Reverse-Grip Barbell Curl": "isolation", "Reverse-Grip EZ-Bar Curl": "isolation",
   "Barbell or EZ-Bar Curl": "isolation", "DB Curl": "isolation", "Cable Curl": "isolation",
   "Reverse Pec Deck": "isolation", "Face Pull": "isolation", "DB Reverse Fly": "isolation", "Cable Reverse Fly": "isolation",
-  "Bent-Over DB Rear Delt Fly": "isolation",
-  "Seated DB Overhead Press": "compound", "Seated Barbell Overhead Press": "compound", "Cable Overhead Press": "compound",
-  "Cable Lateral Raise": "isolation", "DB Lateral Raise": "isolation",
-  "Back Squat": "compound", "Front Squat": "compound", "Goblet Squat": "compound", "Leg Press": "compound",
-  "Barbell RDL": "compound", "DB RDL": "compound", "Bulgarian Split Squat": "compound", "Walking Lunges": "compound",
-  "Standing Calf Raise": "isolation", "Single-Leg Calf Raise": "isolation", "Single-Leg DB Calf Raise": "isolation", "Barbell Calf Raise": "isolation",
+  "Bent-Over DB Rear Delt Fly": "isolation", "Incline DB Rear Delt Fly": "isolation",
+  "Seated DB Overhead Press": "compound", "Seated Barbell Overhead Press": "compound", "Standing Barbell Overhead Press": "compound",
+  "Cable Overhead Press": "compound", "Machine Shoulder Press": "compound", "Arnold Press": "compound",
+  "Cable Lateral Raise": "isolation", "DB Lateral Raise": "isolation", "Machine Lateral Raise": "isolation",
+  "Incline DB Lateral Raise": "isolation", "Upright Row": "isolation",
+  "Back Squat": "compound", "Front Squat": "compound", "Goblet Squat": "compound", "Hack Squat": "compound", "Sissy Squat": "isolation", "Leg Press": "compound",
+  "Barbell RDL": "compound", "DB RDL": "compound", "Good Morning": "compound", "Nordic Ham Curl": "isolation",
+  "Seated Leg Curl Machine": "isolation", "Lying Leg Curl Machine": "isolation",
+  "Bulgarian Split Squat": "compound", "Walking Lunges": "compound",
+  "Hip Thrust": "compound", "Cable Kickback": "isolation", "Glute Bridge": "isolation", "Cable Pull-Through": "compound",
+  "Cable Hip Abduction": "isolation", "Cable Hip Adduction": "isolation", "Sumo Squat": "compound",
+  "Standing Calf Raise": "isolation", "Single-Leg DB Calf Raise": "isolation", "Barbell Calf Raise": "isolation",
+  "Seated Calf Raise": "isolation", "Leg Press Calf Raise": "isolation",
   "Leg Extension Machine": "isolation", "Leg Curl Machine": "isolation", "Hip Abductor Machine": "isolation", "Hip Adductor Machine": "isolation",
 };
 function getRepRange(exerciseName) {
@@ -306,140 +236,861 @@ function getMuscleStatus(exerciseName) {
   return status;
 }
 
-function regionFill(status) {
-  if (status === "primary") return "var(--accent)";
-  if (status === "secondary") return "rgba(214,41,59,0.45)";
-  return "var(--border)";
+// Real anatomical body diagrams, via the MIT-licensed react-body-highlighter
+// package (SVG muscle polygons traced from actual anatomy, not hand-drawn
+// approximations). Its muscle set is coarser than the one this app tracks
+// internally (no separate lats-vs-mid-back, no lateral/side-delt region), so
+// this map picks the closest real region for each internal key; sideDelt
+// intentionally maps to both delt regions since neither view has a true
+// lateral-deltoid shape on its own.
+const MUSCLE_KEY_TO_SLUGS = {
+  chest: ["chest"],
+  frontDelt: ["front-deltoids"],
+  sideDelt: ["front-deltoids", "back-deltoids"],
+  rearDelt: ["back-deltoids"],
+  triceps: ["triceps"],
+  biceps: ["biceps"],
+  forearm: ["forearm"],
+  lats: ["upper-back"],
+  midBack: ["upper-back"],
+  traps: ["trapezius"],
+  lowerBack: ["lower-back"],
+  abs: ["abs"],
+  obliques: ["obliques"],
+  quads: ["quadriceps"],
+  hamstrings: ["hamstring"],
+  glutes: ["gluteal"],
+  calves: ["calves"],
+  abductors: ["abductors"],
+  adductors: ["adductor"],
+};
+
+function statusToBodyData(status) {
+  const primary = [];
+  const secondary = [];
+  Object.entries(status).forEach(([key, level]) => {
+    const slugs = MUSCLE_KEY_TO_SLUGS[key] || [];
+    (level === "primary" ? primary : secondary).push(...slugs);
+  });
+  const data = [];
+  if (primary.length > 0) data.push({ name: "primary", muscles: primary, frequency: 2 });
+  if (secondary.length > 0) data.push({ name: "secondary", muscles: secondary, frequency: 1 });
+  return data;
 }
 
-// Simplified anatomical silhouettes — front and back — with each muscle
-// group as its own shape so it can be colored by primary/secondary/none.
-function BodyFront({ status }) {
-  const f = (key) => regionFill(status[key]);
-  const base = { fill: "var(--surface-2)", stroke: "var(--border)", strokeWidth: 1 };
+const BODY_MODEL_COLORS = ["var(--muscle-secondary)", "var(--accent)"]; // index = frequency - 1
+
+// Sub-region overlays for muscles where a specific head/region is the real
+// target (chest upper/middle/lower, tricep long/lateral/medial, bicep
+// long/short/brachialis). react-body-highlighter only has one whole-muscle
+// polygon per muscle, so these are pre-computed sub-polygons — literally the
+// real chest/triceps/biceps shapes above, geometrically clipped into thirds
+// (chest, triceps) or lateral/medial bands (biceps) — not separately-sourced
+// shapes. Drawn as an absolutely-positioned overlay, same viewBox, directly
+// on top of the base model, in the full primary accent color, while the
+// whole muscle underneath renders in the dimmer secondary color — so "upper
+// chest" reads as "this specific third is the real target; the rest of the
+// chest is just along for the ride," not "the whole chest equally."
+// Biceps' "brachialis" region is a simplification carried over from the
+// rest of this app: brachialis is really a separate, mostly-hidden muscle
+// next to the biceps, not a third head of it — this shows it as the
+// outer sliver of the biceps shape as the closest visual approximation,
+// not a literal anatomical claim.
+const DETAIL_OVERLAYS = {
+  chest: { view: "anterior", regions: {
+    upper: ["51.84 41.63 51.51 47.07 70.20 47.07 62.04 41.63", "29.80 46.53 29.94 47.35 47.92 47.35 47.76 42.04 37.55 42.04"],
+    middle: ["51.51 47.07 51.18 52.52 68.80 52.52 70.61 47.35 70.20 47.07", "29.94 47.35 30.91 52.65 48.09 52.65 47.92 47.35"],
+    lower: ["51.18 52.52 51.02 55.10 57.96 57.96 67.76 55.51 68.80 52.52", "30.91 52.65 31.43 55.51 40.82 57.96 48.16 55.10 48.09 52.65"],
+  } },
+  triceps: { view: "posterior", regions: {
+    long: ["26.81 49.79 17.87 55.74 16.91 60.43 23.85 60.43 26.81 55.74", "25.56 60.43 26.81 58.30 26.81 60.43", "73.62 50.21 82.13 55.74 83.25 60.85 76.50 60.85 73.19 55.74", "72.77 60.85 72.77 58.30 74.47 60.85"],
+    lateral: ["16.91 60.43 14.73 71.06 19.64 71.06 21.70 63.83 23.85 60.43", "25.56 60.43 26.81 60.43 26.81 68.51 25.37 71.06 20.97 71.06 22.55 65.53", "83.25 60.85 85.58 71.49 80.33 71.49 77.87 62.98 76.50 60.85", "72.77 60.85 74.47 60.85 77.02 64.68 78.84 71.49 74.30 71.49 72.77 68.94"],
+    medial: ["14.73 71.06 14.47 72.34 16.60 81.70 19.64 71.06", "25.37 71.06 22.98 75.32 19.15 77.45 20.97 71.06", "85.58 71.49 85.96 73.19 83.40 82.13 80.33 71.49", "78.84 71.49 80.43 77.45 76.60 75.32 74.30 71.49"],
+  } },
+  biceps: { view: "anterior", regions: {
+    long: ["19.43 59.18 19.43 69.84 22.86 66.12 24.08 63.67 24.08 52.65 20.41 55.92", "75.27 52.59 75.27 64.14 76.33 66.12 80.07 70.16 80.07 59.79 78.78 55.51"],
+    short: ["24.08 63.67 28.98 53.88 27.76 49.39 24.08 52.65", "75.27 52.59 71.43 49.39 70.20 54.69 75.27 64.14"],
+    brachialis: ["19.43 59.18 16.73 68.16 17.96 71.43 19.43 69.84", "80.07 70.16 81.63 71.84 82.86 68.98 80.07 59.79"],
+  } },
+};
+
+// If this exercise's detail region belongs to a muscle that's otherwise
+// rendering as "primary," show the whole muscle as "secondary" instead —
+// the overlay polygon covers showing the specific real target in full color.
+function statusForOverlay(status, detail) {
+  if (!detail || status[detail.muscle] !== "primary") return status;
+  return { ...status, [detail.muscle]: "secondary" };
+}
+
+function DetailOverlay({ detail, view }) {
+  const entry = detail && DETAIL_OVERLAYS[detail.muscle];
+  if (!entry || entry.view !== view) return null;
+  const polys = entry.regions[detail.region];
+  if (!polys || polys.length === 0) return null;
   return (
-    <svg viewBox="0 0 100 220" width="52" height="114" aria-label="Front muscles worked">
-      <circle cx="50" cy="14" r="11" {...base} />
-      <path d="M35 30 L65 30 L72 95 L28 95 Z" {...base} />
-      <path d="M28 95 L38 100 L34 210 L26 210 L24 105 Z" {...base} />
-      <path d="M72 95 L62 100 L66 210 L74 210 L76 105 Z" {...base} />
-      <path d="M35 32 L20 38 L18 100 L28 100 L32 45 Z" {...base} />
-      <path d="M65 32 L80 38 L82 100 L72 100 L68 45 Z" {...base} />
-      <ellipse cx="39" cy="48" rx="10" ry="8" fill={f("chest")} />
-      <ellipse cx="61" cy="48" rx="10" ry="8" fill={f("chest")} />
-      <circle cx="26" cy="40" r="6" fill={f("frontDelt")} />
-      <circle cx="74" cy="40" r="6" fill={f("frontDelt")} />
-      <circle cx="21" cy="35" r="4" fill={f("sideDelt")} />
-      <circle cx="79" cy="35" r="4" fill={f("sideDelt")} />
-      <ellipse cx="22" cy="65" rx="5" ry="11" fill={f("biceps")} />
-      <ellipse cx="78" cy="65" rx="5" ry="11" fill={f("biceps")} />
-      <ellipse cx="20" cy="90" rx="4" ry="10" fill={f("forearm")} />
-      <ellipse cx="80" cy="90" rx="4" ry="10" fill={f("forearm")} />
-      <rect x="41" y="62" width="18" height="26" rx="4" fill={f("abs")} />
-      <rect x="33" y="65" width="6" height="20" rx="2" fill={f("obliques")} />
-      <rect x="61" y="65" width="6" height="20" rx="2" fill={f("obliques")} />
-      <ellipse cx="42" cy="140" rx="9" ry="26" fill={f("quads")} />
-      <ellipse cx="58" cy="140" rx="9" ry="26" fill={f("quads")} />
-      <ellipse cx="50" cy="138" rx="4" ry="20" fill={f("adductors")} />
+    <svg viewBox="0 0 100 200" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
+      {polys.map((pts, i) => <polygon key={i} points={pts} fill="var(--accent)" />)}
     </svg>
   );
 }
-function BodyBack({ status }) {
-  const f = (key) => regionFill(status[key]);
-  const base = { fill: "var(--surface-2)", stroke: "var(--border)", strokeWidth: 1 };
+
+function BodyFront({ status, detail }) {
   return (
-    <svg viewBox="0 0 100 220" width="52" height="114" aria-label="Back muscles worked">
-      <circle cx="50" cy="14" r="11" {...base} />
-      <path d="M35 30 L65 30 L72 95 L28 95 Z" {...base} />
-      <path d="M28 95 L38 100 L34 210 L26 210 L24 105 Z" {...base} />
-      <path d="M72 95 L62 100 L66 210 L74 210 L76 105 Z" {...base} />
-      <path d="M35 32 L20 38 L18 100 L28 100 L32 45 Z" {...base} />
-      <path d="M65 32 L80 38 L82 100 L72 100 L68 45 Z" {...base} />
-      <path d="M42 26 L58 26 L68 44 L32 44 Z" fill={f("traps")} />
-      <circle cx="26" cy="40" r="6" fill={f("rearDelt")} />
-      <circle cx="74" cy="40" r="6" fill={f("rearDelt")} />
-      <ellipse cx="22" cy="65" rx="5" ry="11" fill={f("triceps")} />
-      <ellipse cx="78" cy="65" rx="5" ry="11" fill={f("triceps")} />
-      <ellipse cx="33" cy="62" rx="8" ry="15" fill={f("lats")} />
-      <ellipse cx="67" cy="62" rx="8" ry="15" fill={f("lats")} />
-      <rect x="43" y="55" width="14" height="20" rx="4" fill={f("midBack")} />
-      <rect x="42" y="80" width="16" height="14" rx="3" fill={f("lowerBack")} />
-      <ellipse cx="41" cy="108" rx="10" ry="9" fill={f("glutes")} />
-      <ellipse cx="59" cy="108" rx="10" ry="9" fill={f("glutes")} />
-      <ellipse cx="31" cy="110" rx="4" ry="9" fill={f("abductors")} />
-      <ellipse cx="69" cy="110" rx="4" ry="9" fill={f("abductors")} />
-      <ellipse cx="42" cy="145" rx="8" ry="20" fill={f("hamstrings")} />
-      <ellipse cx="58" cy="145" rx="8" ry="20" fill={f("hamstrings")} />
-      <ellipse cx="42" cy="185" rx="6" ry="17" fill={f("calves")} />
-      <ellipse cx="58" cy="185" rx="6" ry="17" fill={f("calves")} />
-    </svg>
+    <div aria-label="Front muscles worked" style={{ position: "relative", width: 52, height: 104 }}>
+      <BodyModel type="anterior" data={statusToBodyData(statusForOverlay(status, detail))} bodyColor="var(--border)" highlightedColors={BODY_MODEL_COLORS} style={{ width: "100%", height: "100%" }} />
+      <DetailOverlay detail={detail} view="anterior" />
+    </div>
+  );
+}
+function BodyBack({ status, detail }) {
+  return (
+    <div aria-label="Back muscles worked" style={{ position: "relative", width: 52, height: 104 }}>
+      <BodyModel type="posterior" data={statusToBodyData(statusForOverlay(status, detail))} bodyColor="var(--border)" highlightedColors={BODY_MODEL_COLORS} style={{ width: "100%", height: "100%" }} />
+      <DetailOverlay detail={detail} view="posterior" />
+    </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Zoomed head/region diagrams — for muscles where the whole-body view can't
-// show which specific portion is targeted (tricep heads, bicep heads, pec
-// regions). Only the matching region lights up; the rest stay neutral.
+// Home — the app's landing screen. Lets you jump back into whichever plan
+// you last picked, or browse/switch to a different workout split. Deeper
+// customization (which exercises populate a slot) happens once you're in a
+// plan, via the existing add/remove-exercise flow.
 // ---------------------------------------------------------------------------
-const REGION_LABELS = { long: "Long Head", lateral: "Lateral Head", medial: "Medial Head", short: "Short Head", brachialis: "Brachialis", upper: "Upper", middle: "Middle", lower: "Lower" };
-
-function TricepZoom({ region }) {
-  const c = (r) => (r === region ? "var(--accent)" : "var(--border)");
-  return (
-    <svg viewBox="0 0 100 150" width="46" height="69" aria-label="Tricep head detail">
-      <path d="M28 8 L72 8 L78 100 L60 140 L40 140 L22 100 Z" fill="var(--surface)" stroke="var(--border)" strokeWidth="1" />
-      <path d="M33 14 L58 12 L60 118 L36 122 Z" fill={c("long")} />
-      <path d="M58 12 L68 18 L70 95 L60 105 Z" fill={c("lateral")} />
-      <path d="M48 100 L64 98 L60 132 L46 128 Z" fill={c("medial")} />
-    </svg>
-  );
+// Maps the two quiz answers (days available, and a tiebreak style question
+// only asked at 5 or 6 days where more than one plan fits) to a plan id.
+function recommendPlanId({ days, fiveDayStyle, sixDayStyle }) {
+  if (days === 3) return "full-body-3day";
+  if (days === 4) return "upper-lower-4day";
+  if (days === 5) return fiveDayStyle === "focused" ? "bro-split-5day" : "original";
+  if (days === 6) return sixDayStyle === "paired" ? "arnold-6day" : "ppl-6day";
+  return "original";
 }
 
-function BicepZoom({ region }) {
-  const c = (r) => (r === region ? "var(--accent)" : "var(--border)");
-  return (
-    <svg viewBox="0 0 100 150" width="46" height="69" aria-label="Bicep head detail">
-      <path d="M28 8 L72 8 L78 100 L60 140 L40 140 L22 100 Z" fill="var(--surface)" stroke="var(--border)" strokeWidth="1" />
-      <path d="M30 16 L52 13 L50 115 L32 108 Z" fill={c("short")} />
-      <path d="M52 13 L70 18 L66 108 L50 115 Z" fill={c("long")} />
-      <path d="M66 85 L78 90 L72 128 L62 122 Z" fill={c("brachialis")} />
-    </svg>
-  );
-}
+const homeChoiceButtonStyle = {
+  width: "100%", textAlign: "left", padding: "14px", borderRadius: 12, cursor: "pointer",
+  background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)",
+};
 
-function ChestZoom({ region }) {
-  const c = (r) => (r === region ? "var(--accent)" : "var(--border)");
-  return (
-    <svg viewBox="0 0 120 90" width="62" height="47" aria-label="Chest region detail">
-      <path d="M60 8 L15 12 L18 34 L60 32 Z" fill={c("upper")} />
-      <path d="M60 32 L18 34 L20 58 L60 58 Z" fill={c("middle")} />
-      <path d="M60 58 L20 58 L26 78 L60 78 Z" fill={c("lower")} />
-      <path d="M60 8 L105 12 L102 34 L60 32 Z" fill={c("upper")} />
-      <path d="M60 32 L102 34 L100 58 L60 58 Z" fill={c("middle")} />
-      <path d="M60 58 L100 58 L94 78 L60 78 Z" fill={c("lower")} />
-    </svg>
-  );
-}
+function HomeScreen({ plans, activePlanId, onChoosePlan, onContinue, onStartBuild }) {
+  const activePlan = plans.find((p) => p.id === activePlanId);
+  // landing -> quizDays -> [quizStyle] -> recommend, or landing -> browse
+  const [mode, setMode] = useState("landing");
+  const [answers, setAnswers] = useState({ days: null, fiveDayStyle: null, sixDayStyle: null });
 
-function MuscleDetail({ detail }) {
-  if (!detail) return null;
-  const ZoomComp = detail.muscle === "triceps" ? TricepZoom : detail.muscle === "biceps" ? BicepZoom : detail.muscle === "chest" ? ChestZoom : null;
-  if (!ZoomComp) return null;
+  function startQuiz() {
+    setAnswers({ days: null, fiveDayStyle: null, sixDayStyle: null });
+    setMode("quizDays");
+  }
+  function pickDays(days) {
+    setAnswers((prev) => ({ ...prev, days }));
+    setMode(days === 5 || days === 6 ? "quizStyle" : "recommend");
+  }
+  function pickStyle(value) {
+    setAnswers((prev) => ({ ...prev, [prev.days === 5 ? "fiveDayStyle" : "sixDayStyle"]: value }));
+    setMode("recommend");
+  }
+
+  const header = (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginBottom: 4 }}>
+      <Dumbbell size={22} color="var(--accent)" />
+      <span className="brand" style={{ fontSize: 30, lineHeight: 1 }}>IRON LOG</span>
+    </div>
+  );
+
+  function BackButton({ onClick }) {
+    return (
+      <button onClick={onClick} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: 16, color: "var(--text-muted)", fontSize: 12 }}>
+        ‹ Back
+      </button>
+    );
+  }
+
+  if (mode === "quizDays" || mode === "quizStyle") {
+    const is5 = answers.days === 5;
+    return (
+      <div style={{ padding: "24px 16px 60px", maxWidth: 520, margin: "0 auto" }}>
+        {header}
+        <div style={{ height: 24 }} />
+        <BackButton onClick={() => setMode(mode === "quizStyle" ? "quizDays" : "landing")} />
+        {mode === "quizDays" ? (
+          <>
+            <div className="display" style={{ fontSize: 18, marginBottom: 4 }}>How Many Days a Week?</div>
+            <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 20 }}>
+              Be realistic about your schedule — fewer, consistent sessions beat an ambitious plan you can't stick to.
+              You can always change this later.
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {[3, 4, 5, 6].map((n) => (
+                <button key={n} onClick={() => pickDays(n)} style={homeChoiceButtonStyle}>
+                  <div className="display" style={{ fontSize: 14 }}>{n} days a week</div>
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="display" style={{ fontSize: 18, marginBottom: 4 }}>What Matters More to You?</div>
+            <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 20 }}>
+              At {answers.days} days a week, more than one split works well — this just breaks the tie.
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {is5 ? (
+                <>
+                  <button onClick={() => pickStyle("frequency")} style={homeChoiceButtonStyle}>
+                    <div style={{ fontWeight: 700, fontSize: 13.5 }}>Hit every muscle more than once a week</div>
+                    <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>Higher frequency, more balanced week to week</div>
+                  </button>
+                  <button onClick={() => pickStyle("focused")} style={homeChoiceButtonStyle}>
+                    <div style={{ fontWeight: 700, fontSize: 13.5 }}>One focused muscle group per session</div>
+                    <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>Classic bodybuilder style, highest volume per session</div>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button onClick={() => pickStyle("pushpull")} style={homeChoiceButtonStyle}>
+                    <div style={{ fontWeight: 700, fontSize: 13.5 }}>Keep pushing and pulling movements separate</div>
+                    <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>The classic Push/Pull/Legs structure</div>
+                  </button>
+                  <button onClick={() => pickStyle("paired")} style={homeChoiceButtonStyle}>
+                    <div style={{ fontWeight: 700, fontSize: 13.5 }}>Pair opposing muscles together each session</div>
+                    <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>E.g. chest with back, so arms train fresh</div>
+                  </button>
+                </>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  if (mode === "recommend") {
+    const recommendedPlan = plans.find((p) => p.id === recommendPlanId(answers));
+    const sessionCount = recommendedPlan ? Object.keys(recommendedPlan.days).length : 0;
+    return (
+      <div style={{ padding: "24px 16px 60px", maxWidth: 520, margin: "0 auto" }}>
+        {header}
+        <div style={{ height: 24 }} />
+        <BackButton onClick={() => setMode(answers.days === 5 || answers.days === 6 ? "quizStyle" : "quizDays")} />
+        <div className="display" style={{ fontSize: 18, marginBottom: 4 }}>Recommended for You</div>
+        <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 20 }}>
+          Based on what you told us, this is the best fit — but every split is listed below too if you'd rather look around.
+        </div>
+        {recommendedPlan && (
+          <div style={{ padding: "16px", borderRadius: 12, background: "var(--accent-dim)", border: "1px solid var(--accent)", marginBottom: 14 }}>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
+              <div className="display" style={{ fontSize: 16 }}>{recommendedPlan.name}</div>
+              <div style={{ fontSize: 10, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{sessionCount}x/week</div>
+            </div>
+            <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 14 }}>{recommendedPlan.description}</div>
+            <button onClick={() => onChoosePlan(recommendedPlan.id)} style={{ width: "100%", padding: "11px", borderRadius: 8, fontSize: 13.5, fontWeight: 700, cursor: "pointer", border: "none", background: "var(--accent)", color: "var(--on-accent)" }}>
+              Use This Plan
+            </button>
+          </div>
+        )}
+        <button onClick={() => setMode("browse")} style={{ width: "100%", background: "none", border: "none", cursor: "pointer", padding: "8px", color: "var(--text-muted)", fontSize: 12.5, textDecoration: "underline" }}>
+          See All Splits Instead
+        </button>
+      </div>
+    );
+  }
+
+  if (mode === "browse") {
+    return (
+      <div style={{ padding: "24px 16px 60px", maxWidth: 520, margin: "0 auto" }}>
+        {header}
+        <div style={{ height: 24 }} />
+        <BackButton onClick={() => setMode("landing")} />
+        <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700, marginBottom: 10 }}>
+          {activePlan ? "Switch Plan" : "All Splits"}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {plans.map((plan) => {
+            const isActive = plan.id === activePlanId;
+            const sessionCount = Object.keys(plan.days).length;
+            return (
+              <div
+                key={plan.id}
+                style={{ padding: "14px", borderRadius: 12, background: "var(--surface)", border: isActive ? "1px solid var(--accent)" : "1px solid var(--border)" }}
+              >
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
+                  <div className="display" style={{ fontSize: 14 }}>{plan.name}</div>
+                  <div style={{ fontSize: 10, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{sessionCount}x/week</div>
+                </div>
+                <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 12 }}>{plan.description}</div>
+                <button
+                  onClick={() => onChoosePlan(plan.id)}
+                  style={{ width: "100%", padding: "9px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer", border: isActive ? "1px solid var(--border)" : "none", background: isActive ? "transparent" : "var(--accent)", color: isActive ? "var(--text-muted)" : "var(--on-accent)" }}
+                >
+                  {isActive ? "Restart This Plan" : "Use This Plan"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // mode === "landing"
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, padding: "8px 10px", background: "var(--surface-2)", borderRadius: 8 }}>
-      <ZoomComp region={detail.region} />
-      <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
-        <div style={{ fontWeight: 700, color: "var(--text)", textTransform: "capitalize" }}>{detail.muscle} — {REGION_LABELS[detail.region]}</div>
-        <div>Zoomed detail of the specific head/region this exercise targets</div>
+    <div style={{ padding: "24px 16px 60px", maxWidth: 520, margin: "0 auto" }}>
+      {header}
+      <div className="display" style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center", letterSpacing: "0.08em", marginBottom: 28 }}>
+        Choose Your Workout Split
+      </div>
+
+      {activePlan && (
+        <button
+          onClick={onContinue}
+          style={{ width: "100%", textAlign: "left", padding: "16px", borderRadius: 12, background: "var(--accent-dim)", border: "1px solid var(--accent)", cursor: "pointer", marginBottom: 24, color: "var(--text)" }}
+        >
+          <div style={{ fontSize: 11, color: "var(--accent)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Continue</div>
+          <div className="display" style={{ fontSize: 16 }}>{activePlan.name}</div>
+        </button>
+      )}
+
+      <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700, marginBottom: 10 }}>
+        {activePlan ? "Switch Plan" : "Get Started"}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <button onClick={startQuiz} style={{ width: "100%", textAlign: "left", padding: "16px", borderRadius: 12, background: "var(--accent)", border: "none", cursor: "pointer" }}>
+          <div className="display" style={{ fontSize: 15, color: "var(--on-accent)" }}>Help Me Choose</div>
+          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.85)", marginTop: 3 }}>Answer a couple quick questions about your schedule and goals</div>
+        </button>
+        <button onClick={() => setMode("browse")} style={{ width: "100%", textAlign: "left", padding: "16px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", cursor: "pointer", color: "var(--text)" }}>
+          <div className="display" style={{ fontSize: 15 }}>Suggested Splits</div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3 }}>See every option and pick one yourself</div>
+        </button>
+        <button onClick={onStartBuild} style={{ width: "100%", textAlign: "left", padding: "16px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", cursor: "pointer", color: "var(--text)" }}>
+          <div className="display" style={{ fontSize: 15 }}>Build My Own Split</div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3 }}>Build a custom split day by day</div>
+        </button>
+      </div>
+
+      <div style={{ fontSize: 11.5, color: "var(--text-muted)", textAlign: "center", lineHeight: 1.5, marginTop: 24 }}>
+        Once you're in a plan, you can add or remove specific exercises in each slot to make it your own.
       </div>
     </div>
   );
 }
 
+// ---------------------------------------------------------------------------
+// Assign a plan's sessions to real days of the week. Shown the first time a
+// plan is picked (pre-filled with a sensible default), and re-visitable any
+// time from the calendar icon in the header — nothing about which days you
+// train is assumed without a way to see and change it.
+// ---------------------------------------------------------------------------
+function ScheduleScreen({ plan, schedule, onSave, onBack }) {
+  const [draft, setDraft] = useState(schedule);
+  const dayKeys = Object.keys(plan.days);
+
+  function setDayFor(weekday, value) {
+    setDraft((prev) => ({ ...prev, [weekday]: value || null }));
+  }
+
+  const assignedCount = WEEKDAYS.filter((w) => draft[w]).length;
+
+  return (
+    <div style={{ padding: "24px 16px 60px", maxWidth: 520, margin: "0 auto" }}>
+      <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: 16, color: "var(--text-muted)", fontSize: 12 }}>
+        ‹ Back to Plans
+      </button>
+      <div className="display" style={{ fontSize: 18, marginBottom: 4 }}>Assign Your Schedule</div>
+      <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 20 }}>
+        {plan.name} has {dayKeys.length} session{dayKeys.length > 1 ? "s" : ""}. Pick which day of the week each one falls
+        on — leave a day as Rest if you're not training that day. You can change this anytime from the calendar icon.
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {WEEKDAYS.map((w) => (
+          <div key={w} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 14px", borderRadius: 10, background: "var(--surface)", border: "1px solid var(--border)" }}>
+            <div className="display" style={{ fontSize: 13 }}>{w}</div>
+            <select
+              value={draft[w] || ""}
+              onChange={(e) => setDayFor(w, e.target.value)}
+              style={{ background: "var(--surface-2)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 8, padding: "7px 10px", fontSize: 12.5, minWidth: 160 }}
+            >
+              <option value="">Rest Day</option>
+              {dayKeys.map((key) => (
+                <option key={key} value={key}>{plan.days[key].tab}</option>
+              ))}
+            </select>
+          </div>
+        ))}
+      </div>
+
+      <button
+        onClick={() => onSave(draft)}
+        disabled={assignedCount === 0}
+        style={{ width: "100%", marginTop: 20, padding: "13px", borderRadius: 10, background: assignedCount === 0 ? "var(--surface-2)" : "var(--accent)", border: "none", cursor: assignedCount === 0 ? "not-allowed" : "pointer", fontSize: 14, fontWeight: 700, color: assignedCount === 0 ? "var(--text-muted)" : "var(--on-accent)" }}
+      >
+        Save & Continue
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Entry point for backfilling a past workout from the History tab: pick a
+// date (native date input — gives a real calendar picker), then which of the
+// active plan's days it was, or "Doesn't Match My Split" for a workout
+// logged with no structured slots at all (see BACKFILL_CUSTOM_KEY).
+// ---------------------------------------------------------------------------
+function AddPastWorkoutSetup({ plan, onStart, onBack }) {
+  const [date, setDate] = useState(todayISO());
+  const dayKeys = Object.keys(plan.days);
+
+  return (
+    <div style={{ padding: "24px 16px 60px", maxWidth: 520, margin: "0 auto" }}>
+      <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: 16, color: "var(--text-muted)", fontSize: 12 }}>
+        ‹ Back to History
+      </button>
+      <div className="display" style={{ fontSize: 18, marginBottom: 4 }}>Add a Past Workout</div>
+      <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 20 }}>
+        Pick the date, then which day of your split it was — or log it separately if it doesn't match anything in {plan.name}.
+      </div>
+
+      <div style={{ fontSize: 10.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700, marginBottom: 6 }}>Date</div>
+      <input
+        type="date"
+        value={date}
+        max={todayISO()}
+        onChange={(e) => setDate(e.target.value)}
+        style={{ width: "100%", padding: "11px 12px", borderRadius: 10, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 14, marginBottom: 20, colorScheme: "dark" }}
+      />
+
+      <div style={{ fontSize: 10.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700, marginBottom: 8 }}>Which Workout?</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {dayKeys.map((key) => (
+          <button key={key} onClick={() => onStart(date, key)} style={homeChoiceButtonStyle}>
+            <div style={{ fontWeight: 700, fontSize: 13.5 }}>{plan.days[key].tab}</div>
+            <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>{plan.days[key].label}</div>
+          </button>
+        ))}
+        <button onClick={() => onStart(date, "__custom__")} style={{ ...homeChoiceButtonStyle, border: "1px dashed var(--border)" }}>
+          <div style={{ fontWeight: 700, fontSize: 13.5 }}>Doesn't Match My Split</div>
+          <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>Log it separately — type in whatever you did</div>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const EQUIP_CHOICES = ["Barbell", "EZ-Bar", "Dumbbell", "Cable", "Machine", "Bodyweight"];
+
+// Sentinel `day` value used only while backfilling a past workout that
+// doesn't match any of the plan's own days ("Custom Workout" path) — keeps
+// its draft/customDraft/addedDraft state fully isolated from any real day
+// key so it can never collide with a live in-progress session.
+const BACKFILL_CUSTOM_KEY = "__backfill_custom__";
+
+// Cable-only: which attachment is on the machine. Shared one field per
+// exercise (like notes), not per set — you don't swap attachments mid-set.
+const CABLE_ATTACHMENTS = [
+  "Straight Bar",
+  "EZ-Curl Bar",
+  "Rope",
+  "V-Bar",
+  "Single D-Handle",
+  "Double D-Handle",
+  "Lat Pulldown Bar (Wide)",
+  "Seated Row Bar",
+  "Multi-Grip Camber Bar",
+  "Ankle Strap",
+  "Ab/Crunch Strap",
+];
+
+// Small "existing" vs "manual" pill switch, used to let the from-scratch
+// slot builder pick a slot/exercise from the app's existing library or type
+// a brand new one, per field, independently.
+function ModeToggle({ mode, onChange, existingLabel, manualLabel }) {
+  return (
+    <div style={{ display: "flex", gap: 4, background: "var(--surface)", padding: 3, borderRadius: 8, border: "1px solid var(--border)", marginBottom: 8 }}>
+      <button onClick={() => onChange("existing")} style={{ flex: 1, padding: "6px 8px", borderRadius: 6, fontSize: 11.5, fontWeight: 600, border: "none", cursor: "pointer", background: mode === "existing" ? "var(--accent)" : "transparent", color: mode === "existing" ? "var(--on-accent)" : "var(--text-muted)" }}>
+        {existingLabel}
+      </button>
+      <button onClick={() => onChange("manual")} style={{ flex: 1, padding: "6px 8px", borderRadius: 6, fontSize: 11.5, fontWeight: 600, border: "none", cursor: "pointer", background: mode === "manual" ? "var(--accent)" : "transparent", color: mode === "manual" ? "var(--on-accent)" : "var(--text-muted)" }}>
+        {manualLabel}
+      </button>
+    </div>
+  );
+}
+
+// A day-picker grouped by originating plan, reused for both "choose an
+// existing day verbatim" and "model my custom day after this one" — the
+// only difference is what the caller does with the (plan, dayKey) it gets.
+function ExistingDayPicker({ existingPlans, onPick }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {existingPlans.map((plan) => (
+        <div key={plan.id}>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700, marginBottom: 8 }}>{plan.name}</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {Object.keys(plan.days).map((dayKey) => (
+              <button key={dayKey} onClick={() => onPick(plan, dayKey)} style={homeChoiceButtonStyle}>
+                <div style={{ fontWeight: 700, fontSize: 13.5 }}>{plan.days[dayKey].tab}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Build a fully custom split from the ground up. Each day either clones an
+// existing day verbatim (name and slots both), or gets a typed-in name that
+// either models an existing day's slots or starts completely empty and gets
+// slots hand-entered one at a time (manual exercise names — no dropdown
+// library lookup, since a from-scratch day isn't assumed to reuse anything).
+// ---------------------------------------------------------------------------
+function BuildPlanScreen({ existingPlans, onSave, onCancel }) {
+  const [step, setStep] = useState("name");
+  const [planName, setPlanName] = useState("");
+  const [days, setDays] = useState([]);
+
+  const [customLabel, setCustomLabel] = useState("");
+  const [scratchSlots, setScratchSlots] = useState([]);
+  const [slotEntryMode, setSlotEntryMode] = useState("existing"); // "existing" | "manual"
+  const [exerciseEntryMode, setExerciseEntryMode] = useState("existing"); // "existing" | "manual"
+  const [slotNameDraft, setSlotNameDraft] = useState("");
+  const [exerciseNameDraft, setExerciseNameDraft] = useState("");
+  const [exerciseTypeDraft, setExerciseTypeDraft] = useState("reps");
+  const [exerciseEquipDraft, setExerciseEquipDraft] = useState("Machine");
+
+  function resetDayFlow() {
+    setCustomLabel("");
+    setScratchSlots([]);
+    setSlotEntryMode("existing");
+    setExerciseEntryMode("existing");
+    setSlotNameDraft("");
+    setExerciseNameDraft("");
+    setExerciseTypeDraft("reps");
+    setExerciseEquipDraft("Machine");
+  }
+
+  // Exercises offered in the "choose existing exercise" dropdown: scoped to
+  // the chosen slot's own exercise pool if the slot name matches a known
+  // one, otherwise every exercise in the app.
+  const exerciseChoicesForSlot = GLOBAL_SLOT_LIBRARY[slotNameDraft] || GLOBAL_EXERCISE_LIST;
+
+  function pickExistingExercise(name) {
+    const found = exerciseChoicesForSlot.find((e) => e.name === name);
+    setExerciseNameDraft(name);
+    if (found) {
+      setExerciseTypeDraft(found.type);
+      setExerciseEquipDraft(found.equip);
+    }
+  }
+
+  function pickExistingSlot(name) {
+    setSlotNameDraft(name);
+    setExerciseNameDraft(""); // that exercise pick may not apply to the new slot
+  }
+
+  function addDay(dayObj) {
+    setDays((prev) => [...prev, dayObj]);
+    resetDayFlow();
+    setStep("days");
+  }
+
+  function pickExistingVerbatim(plan, dayKey) {
+    const d = plan.days[dayKey];
+    addDay({ label: d.label, tab: d.tab, subtitle: d.subtitle, slots: d.slots });
+  }
+
+  function pickModelAfter(plan, dayKey) {
+    const d = plan.days[dayKey];
+    addDay({ label: customLabel, tab: customLabel, subtitle: d.subtitle, slots: d.slots });
+  }
+
+  function addScratchSlot() {
+    if (!slotNameDraft.trim() || !exerciseNameDraft.trim()) return;
+    setScratchSlots((prev) => [...prev, { name: slotNameDraft.trim(), exercises: [{ name: exerciseNameDraft.trim(), type: exerciseTypeDraft, equip: exerciseEquipDraft }] }]);
+    setSlotNameDraft("");
+    setExerciseNameDraft("");
+  }
+
+  function finishScratchDay() {
+    if (scratchSlots.length === 0) return;
+    addDay({ label: customLabel, tab: customLabel, subtitle: `${scratchSlots.length} slot${scratchSlots.length > 1 ? "s" : ""}`, slots: scratchSlots });
+  }
+
+  const header = (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginBottom: 4 }}>
+      <Dumbbell size={22} color="var(--accent)" />
+      <span className="brand" style={{ fontSize: 30, lineHeight: 1 }}>IRON LOG</span>
+    </div>
+  );
+
+  function BackButton({ onClick }) {
+    return (
+      <button onClick={onClick} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: 16, color: "var(--text-muted)", fontSize: 12 }}>
+        ‹ Back
+      </button>
+    );
+  }
+
+  const shell = (backTo, content) => (
+    <div style={{ padding: "24px 16px 60px", maxWidth: 520, margin: "0 auto" }}>
+      {header}
+      <div style={{ height: 24 }} />
+      <BackButton onClick={backTo} />
+      {content}
+    </div>
+  );
+
+  if (step === "name") {
+    return shell(onCancel, (
+      <>
+        <div className="display" style={{ fontSize: 18, marginBottom: 4 }}>Name Your Split</div>
+        <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 16 }}>
+          What do you want to call it? You'll add the individual training days next.
+        </div>
+        <input
+          type="text" autoFocus
+          placeholder="e.g. My Push Focus Split"
+          value={planName}
+          onChange={(e) => setPlanName(e.target.value)}
+          style={{ width: "100%", padding: "11px 12px", borderRadius: 10, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 14, marginBottom: 16 }}
+        />
+        <button
+          onClick={() => setStep("days")}
+          disabled={!planName.trim()}
+          style={{ width: "100%", padding: "13px", borderRadius: 10, background: !planName.trim() ? "var(--surface-2)" : "var(--accent)", border: "none", cursor: !planName.trim() ? "not-allowed" : "pointer", fontSize: 14, fontWeight: 700, color: !planName.trim() ? "var(--text-muted)" : "var(--on-accent)" }}
+        >
+          Next: Add Days
+        </button>
+      </>
+    ));
+  }
+
+  if (step === "days") {
+    return shell(onCancel, (
+      <>
+        <div className="display" style={{ fontSize: 18, marginBottom: 4 }}>{planName}</div>
+        <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 16 }}>
+          Add each training day in this split. Order doesn't matter — you'll assign real days of the week after saving.
+        </div>
+        {days.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+            {days.map((d, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderRadius: 10, background: "var(--surface)", border: "1px solid var(--border)" }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 13.5 }}>{d.tab}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{d.slots.length} slot{d.slots.length > 1 ? "s" : ""}</div>
+                </div>
+                <button onClick={() => setDays((prev) => prev.filter((_, idx) => idx !== i))} style={{ background: "none", border: "none", cursor: "pointer" }}>
+                  <Trash2 size={14} color="var(--text-muted)" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <button onClick={() => setStep("dayNameChoice")} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px", borderRadius: 12, background: "transparent", border: "1px dashed var(--accent)", cursor: "pointer", color: "var(--accent)", fontSize: 13, fontWeight: 700, marginBottom: 16 }}>
+          <Plus size={16} /> Add a Day
+        </button>
+        <button
+          onClick={() => onSave({ name: planName, days })}
+          disabled={days.length === 0}
+          style={{ width: "100%", padding: "13px", borderRadius: 10, background: days.length === 0 ? "var(--surface-2)" : "var(--accent)", border: "none", cursor: days.length === 0 ? "not-allowed" : "pointer", fontSize: 14, fontWeight: 700, color: days.length === 0 ? "var(--text-muted)" : "var(--on-accent)" }}
+        >
+          Save & Finish
+        </button>
+      </>
+    ));
+  }
+
+  if (step === "dayNameChoice") {
+    return shell(() => setStep("days"), (
+      <>
+        <div className="display" style={{ fontSize: 18, marginBottom: 4 }}>How Do You Want to Name This Day?</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <button onClick={() => setStep("dayExisting")} style={homeChoiceButtonStyle}>
+            <div style={{ fontWeight: 700, fontSize: 13.5 }}>Choose From Existing Days</div>
+            <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>Pick a day like "Push" or "Chest" — its exercises come with it</div>
+          </button>
+          <button onClick={() => setStep("dayCustomName")} style={homeChoiceButtonStyle}>
+            <div style={{ fontWeight: 700, fontSize: 13.5 }}>Name It Myself</div>
+            <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>Type your own name for this day</div>
+          </button>
+        </div>
+      </>
+    ));
+  }
+
+  if (step === "dayExisting") {
+    return shell(() => setStep("dayNameChoice"), (
+      <>
+        <div className="display" style={{ fontSize: 18, marginBottom: 4 }}>Choose a Day</div>
+        <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 16 }}>
+          Its exercises will carry over exactly as they are in that split.
+        </div>
+        <ExistingDayPicker existingPlans={existingPlans} onPick={pickExistingVerbatim} />
+      </>
+    ));
+  }
+
+  if (step === "dayCustomName") {
+    return shell(() => setStep("dayNameChoice"), (
+      <>
+        <div className="display" style={{ fontSize: 18, marginBottom: 4 }}>Name This Day</div>
+        <input
+          type="text" autoFocus
+          placeholder="e.g. Chest & Triceps"
+          value={customLabel}
+          onChange={(e) => setCustomLabel(e.target.value)}
+          style={{ width: "100%", padding: "11px 12px", borderRadius: 10, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 14, marginBottom: 16 }}
+        />
+        <button
+          onClick={() => setStep("dayModelChoice")}
+          disabled={!customLabel.trim()}
+          style={{ width: "100%", padding: "13px", borderRadius: 10, background: !customLabel.trim() ? "var(--surface-2)" : "var(--accent)", border: "none", cursor: !customLabel.trim() ? "not-allowed" : "pointer", fontSize: 14, fontWeight: 700, color: !customLabel.trim() ? "var(--text-muted)" : "var(--on-accent)" }}
+        >
+          Next
+        </button>
+      </>
+    ));
+  }
+
+  if (step === "dayModelChoice") {
+    return shell(() => setStep("dayCustomName"), (
+      <>
+        <div className="display" style={{ fontSize: 18, marginBottom: 4 }}>Model "{customLabel}" After an Existing Day?</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <button onClick={() => setStep("dayModelPick")} style={homeChoiceButtonStyle}>
+            <div style={{ fontWeight: 700, fontSize: 13.5 }}>Yes, Pick One</div>
+            <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>Copy its exercises in, keeping your name for the day</div>
+          </button>
+          <button onClick={() => setStep("dayScratch")} style={homeChoiceButtonStyle}>
+            <div style={{ fontWeight: 700, fontSize: 13.5 }}>No, Build From Scratch</div>
+            <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>Type in your own exercises for this day</div>
+          </button>
+        </div>
+      </>
+    ));
+  }
+
+  if (step === "dayModelPick") {
+    return shell(() => setStep("dayModelChoice"), (
+      <>
+        <div className="display" style={{ fontSize: 18, marginBottom: 4 }}>Model After Which Day?</div>
+        <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 16 }}>
+          "{customLabel}" will use this day's exercises.
+        </div>
+        <ExistingDayPicker existingPlans={existingPlans} onPick={pickModelAfter} />
+      </>
+    ));
+  }
+
+  if (step === "dayScratch") {
+    return shell(() => setStep("dayModelChoice"), (
+      <>
+        <div className="display" style={{ fontSize: 18, marginBottom: 4 }}>Build "{customLabel}" From Scratch</div>
+        <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 16 }}>
+          Add each exercise slot one at a time — a slot name (like "Chest — Upper" or just "Chest") and an exercise for it.
+        </div>
+        {scratchSlots.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
+            {scratchSlots.map((s, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 12px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)" }}>
+                <div style={{ fontSize: 12.5 }}>
+                  <span style={{ color: "var(--text-muted)" }}>{s.name}:</span> {s.exercises[0].name}
+                </div>
+                <button onClick={() => setScratchSlots((prev) => prev.filter((_, idx) => idx !== i))} style={{ background: "none", border: "none", cursor: "pointer" }}>
+                  <X size={13} color="var(--text-muted)" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{ padding: "12px", borderRadius: 10, background: "var(--surface-2)", border: "1px solid var(--border)", marginBottom: 16 }}>
+          <div style={{ fontSize: 10.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700, marginBottom: 6 }}>Slot</div>
+          <ModeToggle mode={slotEntryMode} onChange={(m) => { setSlotEntryMode(m); setSlotNameDraft(""); }} existingLabel="Choose Existing" manualLabel="Type My Own" />
+          {slotEntryMode === "existing" ? (
+            <select value={slotNameDraft} onChange={(e) => pickExistingSlot(e.target.value)} style={{ width: "100%", padding: "9px 10px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)", color: slotNameDraft ? "var(--text)" : "var(--text-muted)", fontSize: 13, marginBottom: 12 }}>
+              <option value="">Select a slot…</option>
+              {GLOBAL_SLOT_NAMES.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+          ) : (
+            <input
+              type="text"
+              placeholder="Slot name (e.g. Chest — Upper)"
+              value={slotNameDraft}
+              onChange={(e) => setSlotNameDraft(e.target.value)}
+              style={{ width: "100%", padding: "9px 10px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13, marginBottom: 12 }}
+            />
+          )}
+
+          <div style={{ fontSize: 10.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700, marginBottom: 6 }}>Exercise</div>
+          <ModeToggle mode={exerciseEntryMode} onChange={(m) => { setExerciseEntryMode(m); setExerciseNameDraft(""); }} existingLabel="Choose Existing" manualLabel="Type My Own" />
+          {exerciseEntryMode === "existing" ? (
+            <select value={exerciseNameDraft} onChange={(e) => pickExistingExercise(e.target.value)} style={{ width: "100%", padding: "9px 10px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)", color: exerciseNameDraft ? "var(--text)" : "var(--text-muted)", fontSize: 13, marginBottom: 8 }}>
+              <option value="">Select an exercise…</option>
+              {exerciseChoicesForSlot.map((ex) => <option key={ex.name} value={ex.name}>{ex.name}</option>)}
+            </select>
+          ) : (
+            <>
+              <input
+                type="text"
+                placeholder="Exercise name"
+                value={exerciseNameDraft}
+                onChange={(e) => setExerciseNameDraft(e.target.value)}
+                style={{ width: "100%", padding: "9px 10px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13, marginBottom: 8 }}
+              />
+              <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                <select value={exerciseTypeDraft} onChange={(e) => setExerciseTypeDraft(e.target.value)} style={{ flex: 1, padding: "9px 8px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}>
+                  <option value="reps">Reps</option>
+                  <option value="time">Timed</option>
+                </select>
+                <select value={exerciseEquipDraft} onChange={(e) => setExerciseEquipDraft(e.target.value)} style={{ flex: 1, padding: "9px 8px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}>
+                  {EQUIP_CHOICES.map((eq) => <option key={eq} value={eq}>{eq}</option>)}
+                </select>
+              </div>
+            </>
+          )}
+
+          <button
+            onClick={addScratchSlot}
+            disabled={!slotNameDraft.trim() || !exerciseNameDraft.trim()}
+            style={{ width: "100%", padding: "9px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: (!slotNameDraft.trim() || !exerciseNameDraft.trim()) ? "not-allowed" : "pointer", border: "1px solid var(--border)", background: "transparent", color: "var(--text)" }}
+          >
+            Add This Slot
+          </button>
+        </div>
+        <button
+          onClick={finishScratchDay}
+          disabled={scratchSlots.length === 0}
+          style={{ width: "100%", padding: "13px", borderRadius: 10, background: scratchSlots.length === 0 ? "var(--surface-2)" : "var(--accent)", border: "none", cursor: scratchSlots.length === 0 ? "not-allowed" : "pointer", fontSize: 14, fontWeight: 700, color: scratchSlots.length === 0 ? "var(--text-muted)" : "var(--on-accent)" }}
+        >
+          Done — Add This Day
+        </button>
+      </>
+    ));
+  }
+
+  return null;
+}
+
 export default function WorkoutTracker() {
+  // Always land on Home first; it decides whether to jump back into a
+  // previously-chosen plan or ask you to pick one.
+  const [screen, setScreen] = useState("home");
+  const [selectedPlanId, setSelectedPlanId] = useState(null);
+  const [planLoaded, setPlanLoaded] = useState(false);
+  const [schedules, setSchedules] = useState({}); // { [planId]: { Monday: dayKey|null, ..., Sunday: dayKey|null } }
+  const [schedulesLoaded, setSchedulesLoaded] = useState(false);
+  const [scheduleDraft, setScheduleDraft] = useState(null); // schedule being edited on the Assign Schedule screen
+
   const [view, setView] = useState("log");
-  const [day, setDay] = useState(todayName());
+  const [day, setDay] = useState(null);
   const [openSlot, setOpenSlot] = useState(null);
+  const [openHistoryId, setOpenHistoryId] = useState(null); // history session id expanded to the summary view
+  const [fullHistoryId, setFullHistoryId] = useState(null); // history session id expanded further, to the full per-set view
+  const [backfill, setBackfill] = useState(null); // null | { date: "YYYY-MM-DD", dayKey: string | "__custom__" } — set while logging a past workout
   const [draft, setDraft] = useState({}); // { [slotName]: { exercise, notes, sets: [{weight, value}] } }
   const [history, setHistory] = useState([]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
@@ -448,18 +1099,77 @@ export default function WorkoutTracker() {
   const [savedFlash, setSavedFlash] = useState(false);
   const [customDraft, setCustomDraft] = useState({}); // { [day]: [{ id, exercise, notes, sets }] }
   const [openCustomId, setOpenCustomId] = useState(null);
-  const [removedFromSlots, setRemovedFromSlots] = useState({}); // { [slotName]: [exerciseName, ...] }
+  const [removedFromSlots, setRemovedFromSlots] = useState({}); // { [planId]: { [slotName]: [exerciseName, ...] } }
   const [removedLoaded, setRemovedLoaded] = useState(false);
   const [addedDraft, setAddedDraft] = useState({}); // { [day]: [{ id, slotName, exercise, notes, sets }] }
   const [openAddedId, setOpenAddedId] = useState(null);
   const [addFlow, setAddFlow] = useState(null); // null | { step, bodyPart, slotName }
+  const [customPlans, setCustomPlans] = useState([]); // user-built plans, same shape as PLAN_LIBRARY entries
+  const [customPlansLoaded, setCustomPlansLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadPlan() {
+      try {
+        const res = await storage.get("selected-plan-id", false);
+        // Not validated against a plan list here — customPlans may not have
+        // loaded yet, and an id for a since-deleted custom plan just means
+        // activePlan resolves to undefined downstream, which is handled.
+        if (!cancelled && res && res.value) setSelectedPlanId(res.value);
+      } catch (e) {
+        // no plan chosen yet
+      } finally {
+        if (!cancelled) setPlanLoaded(true);
+      }
+    }
+    loadPlan();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadCustomPlans() {
+      try {
+        const res = await storage.get("custom-plans", false);
+        if (!cancelled && res && res.value) setCustomPlans(JSON.parse(res.value));
+      } catch (e) {
+        // no custom plans built yet
+      } finally {
+        if (!cancelled) setCustomPlansLoaded(true);
+      }
+    }
+    loadCustomPlans();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadSchedules() {
+      try {
+        const res = await storage.get("plan-schedules", false);
+        if (!cancelled && res && res.value) setSchedules(JSON.parse(res.value));
+      } catch (e) {
+        // no schedules assigned yet
+      } finally {
+        if (!cancelled) setSchedulesLoaded(true);
+      }
+    }
+    loadSchedules();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     async function loadRemoved() {
       try {
         const res = await storage.get("workout-removed-exercises", false);
-        if (!cancelled && res && res.value) setRemovedFromSlots(JSON.parse(res.value));
+        if (!cancelled && res && res.value) {
+          const parsed = JSON.parse(res.value);
+          // Migrate the old flat { slotName: [...] } shape (from before plans
+          // existed) by treating it as belonging to the original plan.
+          const isOldFlatShape = Object.values(parsed).some((v) => Array.isArray(v));
+          setRemovedFromSlots(isOldFlatShape ? { original: parsed } : parsed);
+        }
       } catch (e) {
         // none removed yet
       } finally {
@@ -486,39 +1196,225 @@ export default function WorkoutTracker() {
     return () => { cancelled = true; };
   }, []);
 
-  const dayData = WORKOUT_DATA[day];
+  const allPlans = useMemo(() => [...PLAN_LIBRARY, ...customPlans], [customPlans]);
+  const allDaysByKey = useMemo(() => {
+    const merged = { ...ALL_DAYS_BY_KEY };
+    customPlans.forEach((p) => Object.assign(merged, p.days));
+    return merged;
+  }, [customPlans]);
+  const activePlan = allPlans.find((p) => p.id === selectedPlanId) || null;
+  const workoutData = activePlan ? activePlan.days : null;
+  const activeSchedule = (selectedPlanId && schedules[selectedPlanId]) || null;
+
+  // Which weekdays currently have a workout assigned, in calendar order —
+  // drives the day tabs. Unassigned ("rest") weekdays don't get a tab, same
+  // as how the original plan never showed a Thursday tab.
+  const scheduledWeekdays = useMemo(
+    () => (activeSchedule ? WEEKDAYS.filter((w) => activeSchedule[w] && workoutData?.[activeSchedule[w]]) : []),
+    [activeSchedule, workoutData]
+  );
+
+  // Whole-plan exercise library — every slot name mapped to the union of
+  // every exercise ever listed under it, across all days of the active
+  // plan. Powers "add an existing exercise" independent of which day
+  // you're viewing. Body parts group slot names by their prefix
+  // (e.g. "Chest — Upper" -> "Chest"). Recomputed whenever the plan changes.
+  const slotExerciseLibrary = useMemo(() => {
+    const lib = {};
+    if (!workoutData) return lib;
+    Object.values(workoutData).forEach((dayObj) => {
+      dayObj.slots.forEach((slot) => {
+        if (!lib[slot.name]) lib[slot.name] = [];
+        slot.exercises.forEach((ex) => {
+          if (!lib[slot.name].some((e) => e.name === ex.name)) lib[slot.name].push(ex);
+        });
+      });
+    });
+    return lib;
+  }, [workoutData]);
+
+  const bodyParts = useMemo(() => {
+    const parts = {};
+    Object.keys(slotExerciseLibrary).forEach((slotName) => {
+      const part = slotName.includes(" — ") ? slotName.split(" — ")[0] : slotName;
+      if (!parts[part]) parts[part] = [];
+      if (!parts[part].includes(slotName)) parts[part].push(slotName);
+    });
+    return parts;
+  }, [slotExerciseLibrary]);
+
+  function getSlot(d, slotName) {
+    return workoutData[d].slots.find((s) => s.name === slotName);
+  }
+  function getExercise(d, slotName, exerciseName) {
+    const slot = getSlot(d, slotName);
+    return slot?.exercises.find((e) => e.name === exerciseName);
+  }
+  function getExerciseType(d, slotName, exerciseName) {
+    return getExercise(d, slotName, exerciseName)?.type || "reps";
+  }
+  function getExerciseEquip(d, slotName, exerciseName) {
+    return getExercise(d, slotName, exerciseName)?.equip || "Dumbbell";
+  }
+  function getExerciseFromLibrary(slotName, exerciseName) {
+    return (slotExerciseLibrary[slotName] || []).find((e) => e.name === exerciseName);
+  }
+
+  // Takes the plan object directly (rather than looking it up by id) so a
+  // just-built custom plan can be entered immediately, before the
+  // customPlans state update that would make it findable via allPlans has
+  // actually landed.
+  function enterPlan(plan) {
+    setSelectedPlanId(plan.id);
+    storage.set("selected-plan-id", plan.id, false).catch(() => {});
+    setOpenSlot(null);
+    setDraft({});
+    setCustomDraft({});
+    setOpenCustomId(null);
+    setAddedDraft({});
+    setOpenAddedId(null);
+    setAddFlow(null);
+    setView("log");
+
+    const existingSchedule = schedules[plan.id];
+    if (existingSchedule) {
+      // Already assigned before (this plan was used previously) — no need
+      // to ask again, just jump back in on the right day.
+      setDay(getScheduledDay(plan, existingSchedule));
+      setScreen("app");
+    } else {
+      // First time on this plan — let the user assign it to real days of
+      // the week (pre-filled with a sensible default) instead of assuming.
+      setScheduleDraft(plan.defaultSchedule);
+      setScreen("schedule");
+    }
+  }
+
+  function choosePlan(planId) {
+    const plan = allPlans.find((p) => p.id === planId);
+    if (plan) enterPlan(plan);
+  }
+
+  function startBuildPlan() {
+    setScreen("buildPlan");
+  }
+
+  function saveCustomPlan({ name, days }) {
+    const id = `custom-${Date.now()}`;
+    const daysObj = {};
+    days.forEach((d, i) => {
+      daysObj[`${id}::${i}`] = { label: d.label, tab: d.tab, subtitle: d.subtitle, slots: d.slots };
+    });
+    const dayKeys = Object.keys(daysObj);
+    const defaultSchedule = {};
+    WEEKDAYS.forEach((w, i) => { defaultSchedule[w] = dayKeys[i] || null; });
+    const newPlan = {
+      id, name,
+      description: `A custom ${dayKeys.length}-day split you built.`,
+      days: daysObj,
+      defaultSchedule,
+    };
+    const updated = [...customPlans, newPlan];
+    setCustomPlans(updated);
+    storage.set("custom-plans", JSON.stringify(updated), false).catch(() => {});
+    enterPlan(newPlan);
+  }
+
+  function continueWithCurrentPlan() {
+    if (!activePlan) return;
+    if (day == null || !activePlan.days[day]) setDay(getScheduledDay(activePlan, activeSchedule));
+    setScreen("app");
+  }
+
+  function openScheduleEditor() {
+    if (!activePlan) return;
+    setScheduleDraft(activeSchedule || activePlan.defaultSchedule);
+    setScreen("schedule");
+  }
+
+  function saveSchedule(newSchedule) {
+    if (!activePlan) return;
+    const updated = { ...schedules, [selectedPlanId]: newSchedule };
+    setSchedules(updated);
+    storage.set("plan-schedules", JSON.stringify(updated), false).catch(() => {});
+    setDay(getScheduledDay(activePlan, newSchedule));
+    setOpenSlot(null);
+    setScreen("app");
+  }
+
+  function goToHome() {
+    setScreen("home");
+  }
+
+  const isCustomBackfill = backfill?.dayKey === "__custom__";
+
+  // Starts logging a past workout: either one of the active plan's own days
+  // (dayKey is a real key from workoutData) or a session that doesn't match
+  // the plan at all ("__custom__" — routed to BACKFILL_CUSTOM_KEY so its
+  // draft state can never collide with a real day's, live or otherwise).
+  function startBackfill(date, dayKey) {
+    const isCustom = dayKey === "__custom__";
+    const effectiveDay = isCustom ? BACKFILL_CUSTOM_KEY : dayKey;
+    setOpenSlot(null);
+    setOpenCustomId(null);
+    setOpenAddedId(null);
+    setAddFlow(null);
+    setDraft({});
+    setCustomDraft((prev) => ({ ...prev, [effectiveDay]: [] }));
+    setAddedDraft((prev) => ({ ...prev, [effectiveDay]: [] }));
+    setDay(effectiveDay);
+    setBackfill({ date, dayKey });
+    setView("log");
+    setScreen("app");
+  }
+
+  // Leaves backfill mode without saving — used by both the header's Cancel
+  // and the sticky bar's discard button while backfilling.
+  function cancelBackfill() {
+    setBackfill(null);
+    setDraft({});
+    setOpenCustomId(null);
+    setOpenAddedId(null);
+    setAddFlow(null);
+    setDay(activePlan ? getScheduledDay(activePlan, activeSchedule) : null);
+    setView("history");
+  }
+
+  const dayData = workoutData && day ? workoutData[day] : null;
 
   // Filters out exercises the user has removed from a slot's library, but
   // never returns an empty list (a slot always needs at least one option).
   function availableExercises(slotName, exercises) {
-    const removed = removedFromSlots[slotName] || [];
+    const removed = (removedFromSlots[selectedPlanId] || {})[slotName] || [];
     const filtered = exercises.filter((ex) => !removed.includes(ex.name));
     return filtered.length > 0 ? filtered : exercises;
   }
 
-  // Permanently removes one exercise from a slot's option list (persisted).
-  // onReset lets the caller pick what to do if the removed exercise was the
-  // one currently selected in whichever card called this.
+  // Permanently removes one exercise from a slot's option list (persisted,
+  // scoped to the active plan). onReset lets the caller pick what to do if
+  // the removed exercise was the one currently selected in whichever card
+  // called this.
   async function removeExerciseFromLibrary(slotName, exerciseName, allExercises, onReset) {
-    const updated = { ...removedFromSlots, [slotName]: [...(removedFromSlots[slotName] || []), exerciseName] };
+    const planRemoved = { ...(removedFromSlots[selectedPlanId] || {}), [slotName]: [...((removedFromSlots[selectedPlanId] || {})[slotName] || []), exerciseName] };
+    const updated = { ...removedFromSlots, [selectedPlanId]: planRemoved };
     setRemovedFromSlots(updated);
     try {
       await storage.set("workout-removed-exercises", JSON.stringify(updated), false);
     } catch (e) {
       // best-effort; UI already reflects the removal for this session
     }
-    const remaining = allExercises.filter((ex) => !(updated[slotName] || []).includes(ex.name));
+    const remaining = allExercises.filter((ex) => !planRemoved[slotName].includes(ex.name));
     if (remaining.length > 0 && onReset) onReset(remaining[0].name);
   }
 
   function slotDraftOf(slotName) {
     const avail = availableExercises(slotName, getSlot(day, slotName).exercises);
-    return draft[slotName] || { exercise: avail[0].name, notes: "", sets: [emptyRow()] };
+    return draft[slotName] || { exercise: avail[0].name, notes: "", attachment: "", sets: [emptyRow()] };
   }
 
   function setExercise(slotName, exerciseName) {
     setDraft((prev) => {
-      const existing = prev[slotName] || { notes: "", sets: [emptyRow()] };
+      const existing = prev[slotName] || { notes: "", attachment: "", sets: [emptyRow()] };
       return { ...prev, [slotName]: { ...existing, exercise: exerciseName } };
     });
   }
@@ -527,6 +1423,13 @@ export default function WorkoutTracker() {
     setDraft((prev) => {
       const existing = prev[slotName] || slotDraftOf(slotName);
       return { ...prev, [slotName]: { ...existing, notes } };
+    });
+  }
+
+  function setAttachment(slotName, attachment) {
+    setDraft((prev) => {
+      const existing = prev[slotName] || slotDraftOf(slotName);
+      return { ...prev, [slotName]: { ...existing, attachment } };
     });
   }
 
@@ -652,7 +1555,7 @@ export default function WorkoutTracker() {
 
   function addAddedExercise(slotName, exerciseName) {
     const id = `added-${Date.now()}`;
-    setAddedDraft((prev) => ({ ...prev, [day]: [...(prev[day] || []), { id, slotName, exercise: exerciseName, notes: "", sets: [emptyRow()] }] }));
+    setAddedDraft((prev) => ({ ...prev, [day]: [...(prev[day] || []), { id, slotName, exercise: exerciseName, notes: "", attachment: "", sets: [emptyRow()] }] }));
     setOpenAddedId(id);
   }
   function setAddedExercise(id, exerciseName) {
@@ -713,14 +1616,14 @@ export default function WorkoutTracker() {
       if (!prev) return null;
       if (prev.step === "body") return { step: "choose" };
       if (prev.step === "part") return { step: "body" };
-      if (prev.step === "exercise") return BODY_PARTS[prev.bodyPart].length > 1 ? { step: "part", bodyPart: prev.bodyPart } : { step: "body" };
+      if (prev.step === "exercise") return bodyParts[prev.bodyPart].length > 1 ? { step: "part", bodyPart: prev.bodyPart } : { step: "body" };
       return null;
     });
   }
   function chooseNew() { addCustomExercise(); setAddFlow(null); }
   function chooseExisting() { setAddFlow({ step: "body" }); }
   function chooseBodyPart(part) {
-    const parts = BODY_PARTS[part];
+    const parts = bodyParts[part];
     if (parts.length === 1) setAddFlow({ step: "exercise", bodyPart: part, slotName: parts[0] });
     else setAddFlow({ step: "part", bodyPart: part });
   }
@@ -755,7 +1658,7 @@ export default function WorkoutTracker() {
           return extra ? { ...base, extra } : base;
         });
       if (filledSets.length > 0) {
-        out.push({ slot: slotName, exercise: slotDraft.exercise, type, notes: slotDraft.notes || "", sets: filledSets });
+        out.push({ slot: slotName, exercise: slotDraft.exercise, type, notes: slotDraft.notes || "", attachment: slotDraft.attachment || "", sets: filledSets });
       }
     });
     (customDraft[day] || []).forEach((entry) => {
@@ -783,7 +1686,7 @@ export default function WorkoutTracker() {
           return extra ? { ...base, extra } : base;
         });
       if (filledSets.length > 0) {
-        out.push({ slot: entry.slotName, exercise: entry.exercise, type, notes: entry.notes || "", sets: filledSets, addedFromPlan: true });
+        out.push({ slot: entry.slotName, exercise: entry.exercise, type, notes: entry.notes || "", attachment: entry.attachment || "", sets: filledSets, addedFromPlan: true });
       }
     });
     return out;
@@ -809,6 +1712,10 @@ export default function WorkoutTracker() {
   }
 
   function discardSession() {
+    if (backfill) {
+      cancelBackfill();
+      return;
+    }
     setDraft({});
     setCustomDraft((prev) => ({ ...prev, [day]: [] }));
     setOpenCustomId(null);
@@ -821,7 +1728,9 @@ export default function WorkoutTracker() {
     if (sessionBlocks.length === 0) return;
     setSaving(true);
     setStorageError(null);
-    const session = { id: `${Date.now()}`, date: todayISO(), day, blocks: sessionBlocks };
+    const sessionDate = backfill ? backfill.date : todayISO();
+    const sessionDay = backfill ? (isCustomBackfill ? "Custom Workout" : backfill.dayKey) : day;
+    const session = { id: `${Date.now()}`, date: sessionDate, day: sessionDay, blocks: sessionBlocks };
     try {
       const updated = [...history, session];
       const res = await storage.set("workout-history", JSON.stringify(updated), false);
@@ -832,6 +1741,11 @@ export default function WorkoutTracker() {
         setOpenCustomId(null);
         setAddedDraft((prev) => ({ ...prev, [day]: [] }));
         setOpenAddedId(null);
+        if (backfill) {
+          setBackfill(null);
+          setDay(activePlan ? getScheduledDay(activePlan, activeSchedule) : null);
+          setView("history");
+        }
         setSavedFlash(true);
         setTimeout(() => setSavedFlash(false), 1800);
       } else {
@@ -925,6 +1839,7 @@ export default function WorkoutTracker() {
           --danger: #FF5C5C;
           --time: #9FB0C0;
           --time-dim: rgba(159,176,192,0.16);
+          --muscle-secondary: #E3A857;
         }
         .brand { font-family: 'Metal Mania', cursive; letter-spacing: 0.02em; }
         .display { font-family: 'Oswald', sans-serif; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; }
@@ -935,6 +1850,24 @@ export default function WorkoutTracker() {
         @keyframes pop { 0% { transform: scale(1); } 40% { transform: scale(1.06); } 100% { transform: scale(1); } }
       `}</style>
 
+      {screen === "home" && (
+        <HomeScreen plans={allPlans} activePlanId={selectedPlanId} onChoosePlan={choosePlan} onContinue={continueWithCurrentPlan} onStartBuild={startBuildPlan} />
+      )}
+
+      {screen === "buildPlan" && (
+        <BuildPlanScreen existingPlans={allPlans} onSave={saveCustomPlan} onCancel={goToHome} />
+      )}
+
+      {screen === "schedule" && activePlan && scheduleDraft && (
+        <ScheduleScreen plan={activePlan} schedule={scheduleDraft} onSave={saveSchedule} onBack={goToHome} />
+      )}
+
+      {screen === "addPastWorkout" && activePlan && (
+        <AddPastWorkoutSetup plan={activePlan} onStart={startBackfill} onBack={() => setScreen("app")} />
+      )}
+
+      {screen === "app" && (
+      <>
       {/* Header */}
       <div style={{ position: "sticky", top: 0, zIndex: 20, background: "var(--bg)", borderBottom: "1px solid var(--border)", paddingTop: "env(safe-area-inset-top)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px 10px" }}>
@@ -942,30 +1875,54 @@ export default function WorkoutTracker() {
             <Dumbbell size={20} color="var(--accent)" />
             <span className="brand" style={{ fontSize: 26, lineHeight: 1 }}>IRON LOG</span>
           </div>
-          <div style={{ display: "flex", gap: 4, background: "var(--surface)", padding: 3, borderRadius: 10, border: "1px solid var(--border)" }}>
-            <button onClick={() => setView("log")} style={{ padding: "6px 12px", borderRadius: 7, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: view === "log" ? "var(--accent)" : "transparent", color: view === "log" ? "var(--on-accent)" : "var(--text-muted)" }}>
-              Log
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button onClick={goToHome} title="Change plan" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)", cursor: "pointer" }}>
+              <HomeIcon size={15} color="var(--text-muted)" />
             </button>
-            <button onClick={() => setView("history")} style={{ padding: "6px 12px", borderRadius: 7, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 5, background: view === "history" ? "var(--accent)" : "transparent", color: view === "history" ? "var(--on-accent)" : "var(--text-muted)" }}>
-              <HistoryIcon size={13} /> History
+            <button onClick={openScheduleEditor} title="Assign days of the week" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)", cursor: "pointer" }}>
+              <CalendarIcon size={15} color="var(--text-muted)" />
             </button>
+            <div style={{ display: "flex", gap: 4, background: "var(--surface)", padding: 3, borderRadius: 10, border: "1px solid var(--border)" }}>
+              <button onClick={() => setView("log")} style={{ padding: "6px 12px", borderRadius: 7, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: view === "log" ? "var(--accent)" : "transparent", color: view === "log" ? "var(--on-accent)" : "var(--text-muted)" }}>
+                Log
+              </button>
+              <button onClick={() => setView("history")} style={{ padding: "6px 12px", borderRadius: 7, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 5, background: view === "history" ? "var(--accent)" : "transparent", color: view === "history" ? "var(--on-accent)" : "var(--text-muted)" }}>
+                <HistoryIcon size={13} /> History
+              </button>
+            </div>
           </div>
         </div>
 
         {view === "log" && (
           <>
-            <div style={{ display: "flex", gap: 6, padding: "0 16px 12px", overflowX: "auto" }}>
-              {DAY_ORDER.map((d) => (
-                <button key={d} onClick={() => { setDay(d); setOpenSlot(null); }} style={{ flex: "0 0 auto", padding: "8px 14px", borderRadius: 10, cursor: "pointer", border: d === day ? "1px solid var(--accent)" : "1px solid var(--border)", background: d === day ? "var(--accent-dim)" : "var(--surface)", color: d === day ? "var(--text)" : "var(--text-muted)" }}>
-                  <div className="display" style={{ fontSize: 13 }}>{d.slice(0, 3)}</div>
-                  <div style={{ fontSize: 10, color: "var(--text-muted)" }}>{WORKOUT_DATA[d].label}</div>
-                </button>
-              ))}
-            </div>
+            {backfill ? (
+              <div style={{ padding: "0 16px 12px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 14px", borderRadius: 10, background: "var(--accent-dim)", border: "1px solid var(--accent)" }}>
+                  <div>
+                    <div className="display" style={{ fontSize: 11, color: "var(--accent)" }}>Logging Past Workout</div>
+                    <div style={{ fontSize: 12.5, color: "var(--text)", marginTop: 2 }}>{fmtDate(backfill.date)}</div>
+                  </div>
+                  <button onClick={cancelBackfill} style={{ background: "none", border: "1px solid var(--border)", borderRadius: 8, padding: "6px 10px", color: "var(--text-muted)", fontSize: 12, cursor: "pointer" }}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", gap: 6, padding: "0 16px 12px", overflowX: "auto" }}>
+                {scheduledWeekdays.map((w) => {
+                  const assignedDay = activeSchedule[w];
+                  const isActive = assignedDay === day;
+                  return (
+                    <button key={w} onClick={() => { setDay(assignedDay); setOpenSlot(null); }} style={{ flex: "0 0 auto", padding: "8px 14px", borderRadius: 10, cursor: "pointer", border: isActive ? "1px solid var(--accent)" : "1px solid var(--border)", background: isActive ? "var(--accent-dim)" : "var(--surface)", color: isActive ? "var(--text)" : "var(--text-muted)" }}>
+                      <div className="display" style={{ fontSize: 13 }}>{w.slice(0, 3)}</div>
+                      <div style={{ fontSize: 10, color: "var(--text-muted)" }}>{workoutData[assignedDay].label}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "0 16px 12px" }}>
               <div className="display" style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.08em" }}>
-                {dayData.label} · {dayData.subtitle}
+                {isCustomBackfill ? "Custom Workout" : `${dayData.label} · ${dayData.subtitle}`}
               </div>
               <div key={`${sessionVolume}-${sessionHoldTime}`} className={sessionBlocks.length > 0 ? "flash-pop" : ""} style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
                 {sessionHoldTime > 0 && (
@@ -987,13 +1944,12 @@ export default function WorkoutTracker() {
       {/* Body */}
       {view === "log" ? (
         <div style={{ padding: "10px 16px 120px" }}>
-          {dayData.slots.map((slot) => {
+          {!isCustomBackfill && dayData.slots.map((slot) => {
             const isOpen = openSlot === slot.name;
             const sd = slotDraftOf(slot.name);
             const availableEx = availableExercises(slot.name, slot.exercises);
             const type = getExerciseType(day, slot.name, sd.exercise);
             const equip = getExerciseEquip(day, slot.name, sd.exercise);
-            const weightOptions = weightOptionsFor(equip);
             const count = countForSlot(slot.name);
             const prevBest = getPreviousBest(sd.exercise);
             const repRange = getRepRange(sd.exercise);
@@ -1029,27 +1985,35 @@ export default function WorkoutTracker() {
                         <Trash2 size={14} color="var(--text-muted)" />
                       </button>
                     </div>
-                    <div style={{ fontSize: 10.5, color: "var(--text-muted)", marginBottom: 8 }}>{equip} · weights in {FIVE_LB_EQUIP.has(equip) ? "5 lb" : "2.5 lb"} steps</div>
+                    <div style={{ fontSize: 10.5, color: "var(--text-muted)", marginBottom: 8 }}>{equip}</div>
+
+                    {equip === "Cable" && (
+                      <select
+                        value={sd.attachment || ""}
+                        onChange={(e) => setAttachment(slot.name, e.target.value)}
+                        style={{ width: "100%", padding: "8px 10px", marginBottom: 10, borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", color: sd.attachment ? "var(--text)" : "var(--text-muted)", fontSize: 12.5 }}
+                      >
+                        <option value="">Attachment (optional)</option>
+                        {CABLE_ATTACHMENTS.map((a) => <option key={a} value={a}>{a}</option>)}
+                      </select>
+                    )}
 
                     {(() => {
                       const muscleStatus = getMuscleStatus(sd.exercise);
                       const detail = MUSCLE_MAP[sd.exercise]?.detail;
                       return Object.keys(muscleStatus).length > 0 ? (
-                        <>
-                          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10, padding: "8px 10px", background: "var(--surface-2)", borderRadius: 8 }}>
-                            <BodyFront status={muscleStatus} />
-                            <BodyBack status={muscleStatus} />
-                            <div style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: 10, color: "var(--text-muted)" }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                                <span style={{ width: 8, height: 8, borderRadius: 99, background: "var(--accent)", display: "inline-block", flexShrink: 0 }} /> Primary
-                              </div>
-                              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                                <span style={{ width: 8, height: 8, borderRadius: 99, background: "rgba(214,41,59,0.45)", display: "inline-block", flexShrink: 0 }} /> Secondary
-                              </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10, padding: "8px 10px", background: "var(--surface-2)", borderRadius: 8 }}>
+                          <BodyFront status={muscleStatus} detail={detail} />
+                          <BodyBack status={muscleStatus} detail={detail} />
+                          <div style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: 10, color: "var(--text-muted)" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                              <span style={{ width: 8, height: 8, borderRadius: 99, background: "var(--accent)", display: "inline-block", flexShrink: 0 }} /> Primary
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                              <span style={{ width: 8, height: 8, borderRadius: 99, background: "var(--muscle-secondary)", display: "inline-block", flexShrink: 0 }} /> Secondary
                             </div>
                           </div>
-                          <MuscleDetail detail={detail} />
-                        </>
+                        </div>
                       ) : null;
                     })()}
 
@@ -1087,16 +2051,13 @@ export default function WorkoutTracker() {
                         <div key={i} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
                             <span className="tabular" style={{ fontSize: 11, color: "var(--text-muted)", width: 34, flexShrink: 0 }}>Set {i + 1}</span>
-                            <select
+                            <input
+                              type="number" inputMode="decimal"
+                              placeholder={type === "time" ? "Wt (opt)" : "Weight"}
                               value={row.weight}
                               onChange={(e) => updateRow(slot.name, i, "weight", e.target.value)}
-                              style={{ flex: 1, minWidth: 0, padding: "9px 6px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", color: row.weight === "" ? "var(--text-muted)" : "var(--text)", fontSize: 13 }}
-                            >
-                              <option value="">{type === "time" ? "Wt (opt)" : "Weight"}</option>
-                              {weightOptions.map((w) => (
-                                <option key={w} value={w}>{w} lb</option>
-                              ))}
-                            </select>
+                              style={{ flex: 1, minWidth: 0, padding: "9px 6px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13 }}
+                            />
 
                             {type === "time" ? (
                               <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
@@ -1131,20 +2092,26 @@ export default function WorkoutTracker() {
                             <div style={{ marginLeft: 41, padding: "8px 9px", background: "var(--surface)", border: "1px dashed var(--border)", borderRadius: 8, display: "flex", flexDirection: "column", gap: 6 }}>
                               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                                 <div style={{ display: "flex", gap: 4 }}>
-                                  <button onClick={() => updateExtra(slot.name, i, "type", "superset")} style={{ padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", border: row.extra.type === "superset" ? "1px solid var(--accent)" : "1px solid var(--border)", background: row.extra.type === "superset" ? "var(--accent-dim)" : "transparent", color: row.extra.type === "superset" ? "var(--accent)" : "var(--text-muted)" }}>Superset</button>
-                                  <button onClick={() => updateExtra(slot.name, i, "type", "dropset")} style={{ padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", border: row.extra.type === "dropset" ? "1px solid var(--accent)" : "1px solid var(--border)", background: row.extra.type === "dropset" ? "var(--accent-dim)" : "transparent", color: row.extra.type === "dropset" ? "var(--accent)" : "var(--text-muted)" }}>Drop Set</button>
+                                  <button onClick={() => { updateExtra(slot.name, i, "type", "superset"); if (row.extra.type === "dropset") updateExtra(slot.name, i, "exercise", ""); }} style={{ padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", border: row.extra.type === "superset" ? "1px solid var(--accent)" : "1px solid var(--border)", background: row.extra.type === "superset" ? "var(--accent-dim)" : "transparent", color: row.extra.type === "superset" ? "var(--accent)" : "var(--text-muted)" }}>Superset</button>
+                                  <button onClick={() => { updateExtra(slot.name, i, "type", "dropset"); updateExtra(slot.name, i, "exercise", sd.exercise); }} style={{ padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", border: row.extra.type === "dropset" ? "1px solid var(--accent)" : "1px solid var(--border)", background: row.extra.type === "dropset" ? "var(--accent-dim)" : "transparent", color: row.extra.type === "dropset" ? "var(--accent)" : "var(--text-muted)" }}>Drop Set</button>
                                 </div>
                                 <button onClick={() => removeExtra(slot.name, i)} style={{ background: "none", border: "none", cursor: "pointer", padding: 3 }}>
                                   <X size={12} color="var(--text-muted)" />
                                 </button>
                               </div>
-                              <input
-                                type="text"
-                                placeholder="Exercise name"
-                                value={row.extra.exercise}
-                                onChange={(e) => updateExtra(slot.name, i, "exercise", e.target.value)}
-                                style={{ width: "100%", padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
-                              />
+                              {row.extra.type === "dropset" ? (
+                                <div style={{ width: "100%", padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text-muted)", fontSize: 12.5 }}>
+                                  {sd.exercise || "Exercise name"}
+                                </div>
+                              ) : (
+                                <input
+                                  type="text"
+                                  placeholder="Exercise name"
+                                  value={row.extra.exercise}
+                                  onChange={(e) => updateExtra(slot.name, i, "exercise", e.target.value)}
+                                  style={{ width: "100%", padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
+                                />
+                              )}
                               <div style={{ display: "flex", gap: 6 }}>
                                 <input
                                   type="number" inputMode="decimal"
@@ -1153,13 +2120,16 @@ export default function WorkoutTracker() {
                                   onChange={(e) => updateExtra(slot.name, i, "weight", e.target.value)}
                                   style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
                                 />
-                                <input
-                                  type="number" inputMode="numeric"
-                                  placeholder="Reps"
+                                <select
                                   value={row.extra.value}
                                   onChange={(e) => updateExtra(slot.name, i, "value", e.target.value)}
-                                  style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
-                                />
+                                  style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: row.extra.value === "" ? "var(--text-muted)" : "var(--text)", fontSize: 12.5 }}
+                                >
+                                  <option value="">Reps</option>
+                                  {REPS_OPTIONS.map((r) => (
+                                    <option key={r} value={r}>{r}</option>
+                                  ))}
+                                </select>
                               </div>
                             </div>
                           ) : (
@@ -1181,17 +2151,16 @@ export default function WorkoutTracker() {
           })}
 
           {/* Exercises added from the plan's existing library */}
-          {addedList.length > 0 && (
+          {!isCustomBackfill && addedList.length > 0 && (
             <div className="display" style={{ fontSize: 11, color: "var(--text-muted)", margin: "14px 0 8px" }}>Added From Plan</div>
           )}
 
-          {addedList.map((entry) => {
+          {!isCustomBackfill && addedList.map((entry) => {
             const isOpen = openAddedId === entry.id;
-            const libraryEx = availableExercises(entry.slotName, SLOT_EXERCISE_LIBRARY[entry.slotName] || []);
+            const libraryEx = availableExercises(entry.slotName, slotExerciseLibrary[entry.slotName] || []);
             const exObj = getExerciseFromLibrary(entry.slotName, entry.exercise);
             const type = exObj?.type || "reps";
             const equip = exObj?.equip || "Dumbbell";
-            const weightOptions = weightOptionsFor(equip);
             const filledCount = entry.sets.filter((s) => (type === "time" ? s.value !== "" : s.weight !== "" && s.value !== "")).length;
             const prevBest = getPreviousBest(entry.exercise);
             const repRange = getRepRange(entry.exercise);
@@ -1231,7 +2200,7 @@ export default function WorkoutTracker() {
                         ))}
                       </select>
                       <button
-                        onClick={() => removeExerciseFromLibrary(entry.slotName, entry.exercise, SLOT_EXERCISE_LIBRARY[entry.slotName], (name) => setAddedExercise(entry.id, name))}
+                        onClick={() => removeExerciseFromLibrary(entry.slotName, entry.exercise, slotExerciseLibrary[entry.slotName], (name) => setAddedExercise(entry.id, name))}
                         disabled={libraryEx.length <= 1}
                         title="Remove this exercise from the plan"
                         style={{ flexShrink: 0, width: 38, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", cursor: libraryEx.length <= 1 ? "default" : "pointer", opacity: libraryEx.length <= 1 ? 0.3 : 1 }}
@@ -1239,24 +2208,32 @@ export default function WorkoutTracker() {
                         <Trash2 size={14} color="var(--text-muted)" />
                       </button>
                     </div>
-                    <div style={{ fontSize: 10.5, color: "var(--text-muted)", marginBottom: 8 }}>{equip} · weights in {FIVE_LB_EQUIP.has(equip) ? "5 lb" : "2.5 lb"} steps</div>
+                    <div style={{ fontSize: 10.5, color: "var(--text-muted)", marginBottom: 8 }}>{equip}</div>
+
+                    {equip === "Cable" && (
+                      <select
+                        value={entry.attachment || ""}
+                        onChange={(e) => updateAddedField(entry.id, "attachment", e.target.value)}
+                        style={{ width: "100%", padding: "8px 10px", marginBottom: 10, borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", color: entry.attachment ? "var(--text)" : "var(--text-muted)", fontSize: 12.5 }}
+                      >
+                        <option value="">Attachment (optional)</option>
+                        {CABLE_ATTACHMENTS.map((a) => <option key={a} value={a}>{a}</option>)}
+                      </select>
+                    )}
 
                     {Object.keys(muscleStatus).length > 0 && (
-                      <>
-                        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10, padding: "8px 10px", background: "var(--surface-2)", borderRadius: 8 }}>
-                          <BodyFront status={muscleStatus} />
-                          <BodyBack status={muscleStatus} />
-                          <div style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: 10, color: "var(--text-muted)" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                              <span style={{ width: 8, height: 8, borderRadius: 99, background: "var(--accent)", display: "inline-block", flexShrink: 0 }} /> Primary
-                            </div>
-                            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                              <span style={{ width: 8, height: 8, borderRadius: 99, background: "rgba(214,41,59,0.45)", display: "inline-block", flexShrink: 0 }} /> Secondary
-                            </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10, padding: "8px 10px", background: "var(--surface-2)", borderRadius: 8 }}>
+                        <BodyFront status={muscleStatus} detail={detail} />
+                        <BodyBack status={muscleStatus} detail={detail} />
+                        <div style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: 10, color: "var(--text-muted)" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: 99, background: "var(--accent)", display: "inline-block", flexShrink: 0 }} /> Primary
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: 99, background: "var(--muscle-secondary)", display: "inline-block", flexShrink: 0 }} /> Secondary
                           </div>
                         </div>
-                        <MuscleDetail detail={detail} />
-                      </>
+                      </div>
                     )}
 
                     {prevBest && (
@@ -1293,16 +2270,13 @@ export default function WorkoutTracker() {
                         <div key={i} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
                             <span className="tabular" style={{ fontSize: 11, color: "var(--text-muted)", width: 34, flexShrink: 0 }}>Set {i + 1}</span>
-                            <select
+                            <input
+                              type="number" inputMode="decimal"
+                              placeholder={type === "time" ? "Wt (opt)" : "Weight"}
                               value={row.weight}
                               onChange={(e) => updateAddedRow(entry.id, i, "weight", e.target.value)}
-                              style={{ flex: 1, minWidth: 0, padding: "9px 6px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", color: row.weight === "" ? "var(--text-muted)" : "var(--text)", fontSize: 13 }}
-                            >
-                              <option value="">{type === "time" ? "Wt (opt)" : "Weight"}</option>
-                              {weightOptions.map((w) => (
-                                <option key={w} value={w}>{w} lb</option>
-                              ))}
-                            </select>
+                              style={{ flex: 1, minWidth: 0, padding: "9px 6px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13 }}
+                            />
 
                             {type === "time" ? (
                               <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
@@ -1337,20 +2311,26 @@ export default function WorkoutTracker() {
                             <div style={{ marginLeft: 41, padding: "8px 9px", background: "var(--surface)", border: "1px dashed var(--border)", borderRadius: 8, display: "flex", flexDirection: "column", gap: 6 }}>
                               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                                 <div style={{ display: "flex", gap: 4 }}>
-                                  <button onClick={() => updateAddedExtra(entry.id, i, "type", "superset")} style={{ padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", border: row.extra.type === "superset" ? "1px solid var(--accent)" : "1px solid var(--border)", background: row.extra.type === "superset" ? "var(--accent-dim)" : "transparent", color: row.extra.type === "superset" ? "var(--accent)" : "var(--text-muted)" }}>Superset</button>
-                                  <button onClick={() => updateAddedExtra(entry.id, i, "type", "dropset")} style={{ padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", border: row.extra.type === "dropset" ? "1px solid var(--accent)" : "1px solid var(--border)", background: row.extra.type === "dropset" ? "var(--accent-dim)" : "transparent", color: row.extra.type === "dropset" ? "var(--accent)" : "var(--text-muted)" }}>Drop Set</button>
+                                  <button onClick={() => { updateAddedExtra(entry.id, i, "type", "superset"); if (row.extra.type === "dropset") updateAddedExtra(entry.id, i, "exercise", ""); }} style={{ padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", border: row.extra.type === "superset" ? "1px solid var(--accent)" : "1px solid var(--border)", background: row.extra.type === "superset" ? "var(--accent-dim)" : "transparent", color: row.extra.type === "superset" ? "var(--accent)" : "var(--text-muted)" }}>Superset</button>
+                                  <button onClick={() => { updateAddedExtra(entry.id, i, "type", "dropset"); updateAddedExtra(entry.id, i, "exercise", entry.exercise); }} style={{ padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", border: row.extra.type === "dropset" ? "1px solid var(--accent)" : "1px solid var(--border)", background: row.extra.type === "dropset" ? "var(--accent-dim)" : "transparent", color: row.extra.type === "dropset" ? "var(--accent)" : "var(--text-muted)" }}>Drop Set</button>
                                 </div>
                                 <button onClick={() => removeAddedExtra(entry.id, i)} style={{ background: "none", border: "none", cursor: "pointer", padding: 3 }}>
                                   <X size={12} color="var(--text-muted)" />
                                 </button>
                               </div>
-                              <input
-                                type="text"
-                                placeholder="Exercise name"
-                                value={row.extra.exercise}
-                                onChange={(e) => updateAddedExtra(entry.id, i, "exercise", e.target.value)}
-                                style={{ width: "100%", padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
-                              />
+                              {row.extra.type === "dropset" ? (
+                                <div style={{ width: "100%", padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text-muted)", fontSize: 12.5 }}>
+                                  {entry.exercise || "Exercise name"}
+                                </div>
+                              ) : (
+                                <input
+                                  type="text"
+                                  placeholder="Exercise name"
+                                  value={row.extra.exercise}
+                                  onChange={(e) => updateAddedExtra(entry.id, i, "exercise", e.target.value)}
+                                  style={{ width: "100%", padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
+                                />
+                              )}
                               <div style={{ display: "flex", gap: 6 }}>
                                 <input
                                   type="number" inputMode="decimal"
@@ -1359,13 +2339,16 @@ export default function WorkoutTracker() {
                                   onChange={(e) => updateAddedExtra(entry.id, i, "weight", e.target.value)}
                                   style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
                                 />
-                                <input
-                                  type="number" inputMode="numeric"
-                                  placeholder="Reps"
+                                <select
                                   value={row.extra.value}
                                   onChange={(e) => updateAddedExtra(entry.id, i, "value", e.target.value)}
-                                  style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
-                                />
+                                  style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: row.extra.value === "" ? "var(--text-muted)" : "var(--text)", fontSize: 12.5 }}
+                                >
+                                  <option value="">Reps</option>
+                                  {REPS_OPTIONS.map((r) => (
+                                    <option key={r} value={r}>{r}</option>
+                                  ))}
+                                </select>
                               </div>
                             </div>
                           ) : (
@@ -1480,20 +2463,26 @@ export default function WorkoutTracker() {
                             <div style={{ marginLeft: 41, padding: "8px 9px", background: "var(--surface)", border: "1px dashed var(--border)", borderRadius: 8, display: "flex", flexDirection: "column", gap: 6 }}>
                               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                                 <div style={{ display: "flex", gap: 4 }}>
-                                  <button onClick={() => updateCustomExtra(entry.id, i, "type", "superset")} style={{ padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", border: row.extra.type === "superset" ? "1px solid var(--accent)" : "1px solid var(--border)", background: row.extra.type === "superset" ? "var(--accent-dim)" : "transparent", color: row.extra.type === "superset" ? "var(--accent)" : "var(--text-muted)" }}>Superset</button>
-                                  <button onClick={() => updateCustomExtra(entry.id, i, "type", "dropset")} style={{ padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", border: row.extra.type === "dropset" ? "1px solid var(--accent)" : "1px solid var(--border)", background: row.extra.type === "dropset" ? "var(--accent-dim)" : "transparent", color: row.extra.type === "dropset" ? "var(--accent)" : "var(--text-muted)" }}>Drop Set</button>
+                                  <button onClick={() => { updateCustomExtra(entry.id, i, "type", "superset"); if (row.extra.type === "dropset") updateCustomExtra(entry.id, i, "exercise", ""); }} style={{ padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", border: row.extra.type === "superset" ? "1px solid var(--accent)" : "1px solid var(--border)", background: row.extra.type === "superset" ? "var(--accent-dim)" : "transparent", color: row.extra.type === "superset" ? "var(--accent)" : "var(--text-muted)" }}>Superset</button>
+                                  <button onClick={() => { updateCustomExtra(entry.id, i, "type", "dropset"); updateCustomExtra(entry.id, i, "exercise", entry.exercise); }} style={{ padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", border: row.extra.type === "dropset" ? "1px solid var(--accent)" : "1px solid var(--border)", background: row.extra.type === "dropset" ? "var(--accent-dim)" : "transparent", color: row.extra.type === "dropset" ? "var(--accent)" : "var(--text-muted)" }}>Drop Set</button>
                                 </div>
                                 <button onClick={() => removeCustomExtra(entry.id, i)} style={{ background: "none", border: "none", cursor: "pointer", padding: 3 }}>
                                   <X size={12} color="var(--text-muted)" />
                                 </button>
                               </div>
-                              <input
-                                type="text"
-                                placeholder="Exercise name"
-                                value={row.extra.exercise}
-                                onChange={(e) => updateCustomExtra(entry.id, i, "exercise", e.target.value)}
-                                style={{ width: "100%", padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
-                              />
+                              {row.extra.type === "dropset" ? (
+                                <div style={{ width: "100%", padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text-muted)", fontSize: 12.5 }}>
+                                  {entry.exercise || "Exercise name"}
+                                </div>
+                              ) : (
+                                <input
+                                  type="text"
+                                  placeholder="Exercise name"
+                                  value={row.extra.exercise}
+                                  onChange={(e) => updateCustomExtra(entry.id, i, "exercise", e.target.value)}
+                                  style={{ width: "100%", padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
+                                />
+                              )}
                               <div style={{ display: "flex", gap: 6 }}>
                                 <input
                                   type="number" inputMode="decimal"
@@ -1502,13 +2491,16 @@ export default function WorkoutTracker() {
                                   onChange={(e) => updateCustomExtra(entry.id, i, "weight", e.target.value)}
                                   style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
                                 />
-                                <input
-                                  type="number" inputMode="numeric"
-                                  placeholder="Reps"
+                                <select
                                   value={row.extra.value}
                                   onChange={(e) => updateCustomExtra(entry.id, i, "value", e.target.value)}
-                                  style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
-                                />
+                                  style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: row.extra.value === "" ? "var(--text-muted)" : "var(--text)", fontSize: 12.5 }}
+                                >
+                                  <option value="">Reps</option>
+                                  {REPS_OPTIONS.map((r) => (
+                                    <option key={r} value={r}>{r}</option>
+                                  ))}
+                                </select>
                               </div>
                             </div>
                           ) : (
@@ -1563,7 +2555,7 @@ export default function WorkoutTracker() {
 
               {addFlow.step === "body" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {Object.keys(BODY_PARTS).map((part) => (
+                  {Object.keys(bodyParts).map((part) => (
                     <button key={part} onClick={() => chooseBodyPart(part)} style={{ width: "100%", textAlign: "left", padding: "10px 14px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", cursor: "pointer", color: "var(--text)", fontSize: 13, fontWeight: 600 }}>
                       {part}
                     </button>
@@ -1573,7 +2565,7 @@ export default function WorkoutTracker() {
 
               {addFlow.step === "part" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {BODY_PARTS[addFlow.bodyPart].map((slotName) => (
+                  {bodyParts[addFlow.bodyPart].map((slotName) => (
                     <button key={slotName} onClick={() => chooseSlotName(slotName)} style={{ width: "100%", textAlign: "left", padding: "10px 14px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", cursor: "pointer", color: "var(--text)", fontSize: 13, fontWeight: 600 }}>
                       {slotName}
                     </button>
@@ -1583,7 +2575,7 @@ export default function WorkoutTracker() {
 
               {addFlow.step === "exercise" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {availableExercises(addFlow.slotName, SLOT_EXERCISE_LIBRARY[addFlow.slotName] || []).map((ex) => (
+                  {availableExercises(addFlow.slotName, slotExerciseLibrary[addFlow.slotName] || []).map((ex) => (
                     <button key={ex.name} onClick={() => chooseLibraryExercise(addFlow.slotName, ex.name)} style={{ width: "100%", textAlign: "left", padding: "10px 14px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", cursor: "pointer", color: "var(--text)", fontSize: 13, fontWeight: 600 }}>
                       {ex.name}{ex.type === "time" ? " (timed)" : ""}
                       <span style={{ fontWeight: 400, color: "var(--text-muted)", fontSize: 11 }}> · {ex.equip}</span>
@@ -1593,13 +2585,21 @@ export default function WorkoutTracker() {
               )}
             </div>
           ) : (
-            <button onClick={startAddFlow} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px", borderRadius: 12, background: "transparent", border: "1px dashed var(--accent)", cursor: "pointer", color: "var(--accent)", fontSize: 13, fontWeight: 700 }}>
+            <button onClick={isCustomBackfill ? addCustomExercise : startAddFlow} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px", borderRadius: 12, background: "transparent", border: "1px dashed var(--accent)", cursor: "pointer", color: "var(--accent)", fontSize: 13, fontWeight: 700 }}>
               <Plus size={16} /> Add Exercise
             </button>
           )}
         </div>
       ) : (
         <div style={{ padding: "10px 16px 40px" }}>
+          {activePlan && (
+            <button
+              onClick={() => setScreen("addPastWorkout")}
+              style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "11px", borderRadius: 10, background: "transparent", border: "1px dashed var(--accent)", cursor: "pointer", color: "var(--accent)", fontSize: 13, fontWeight: 700, marginBottom: 14 }}
+            >
+              <Plus size={15} /> Add Past Workout
+            </button>
+          )}
           {!historyLoaded ? (
             <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-muted)", fontSize: 13, padding: "20px 0" }}>
               <Loader2 size={16} /> Loading history…
@@ -1611,36 +2611,107 @@ export default function WorkoutTracker() {
               <div style={{ fontSize: 12.5, marginTop: 4 }}>Finish a session and hit Save Workout to start your log.</div>
             </div>
           ) : (
-            [...history].reverse().map((s) => {
+            [...history]
+              .reverse()
+              .sort((a, b) => b.date.localeCompare(a.date))
+              .map((s) => {
               const blocks = s.blocks || [];
               const vol = blocks.filter((b) => b.type === "reps").reduce((sum, b) => sum + b.sets.reduce((s2, st) => s2 + st.weight * st.value, 0), 0);
               const hold = blocks.filter((b) => b.type === "time").reduce((sum, b) => sum + b.sets.reduce((s2, st) => s2 + st.value, 0), 0);
+              const isOpen = openHistoryId === s.id;
+              const isFull = fullHistoryId === s.id;
               return (
-                <div key={s.id} style={{ marginBottom: 10, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, padding: 14 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <div key={s.id} style={{ marginBottom: 10, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
+                  <button
+                    onClick={() => { setOpenHistoryId(isOpen ? null : s.id); if (isOpen) setFullHistoryId(null); }}
+                    style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: 14, background: "transparent", border: "none", cursor: "pointer", textAlign: "left" }}
+                  >
                     <div>
-                      <div className="display" style={{ fontSize: 14 }}>{s.day} · {WORKOUT_DATA[s.day]?.label}</div>
+                      <div className="display" style={{ fontSize: 14 }}>
+                        {allDaysByKey[s.day]?.tab || s.day}
+                        {allDaysByKey[s.day] && allDaysByKey[s.day].label !== allDaysByKey[s.day].tab && ` · ${allDaysByKey[s.day].label}`}
+                      </div>
                       <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{fmtDate(s.date)}</div>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       {hold > 0 && <span className="tabular" style={{ fontSize: 12, color: "var(--time)" }}>{hold}s</span>}
                       {vol > 0 && <span className="tabular" style={{ fontSize: 13, color: "var(--accent)", fontWeight: 700 }}>{vol.toLocaleString()} lb</span>}
-                      <button onClick={() => deleteSession(s.id)} style={{ background: "none", border: "none", cursor: "pointer" }}>
+                      <span
+                        role="button"
+                        onClick={(e) => { e.stopPropagation(); deleteSession(s.id); }}
+                        style={{ display: "flex", cursor: "pointer" }}
+                      >
                         <Trash2 size={14} color="var(--text-muted)" />
-                      </button>
+                      </span>
+                      <ChevronDown size={16} color="var(--text-muted)" style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
                     </div>
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {blocks.map((b, i) => (
-                      <div key={i}>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5 }}>
-                          <span style={{ color: "var(--text-muted)" }}>{b.slot}: <span style={{ color: "var(--text)" }}>{b.exercise}</span></span>
-                          <span className="tabular" style={{ color: b.type === "time" ? "var(--time)" : "var(--text-muted)" }}>{fmtSetsList(b)}</span>
-                        </div>
-                        {b.notes && <div style={{ fontSize: 11.5, color: "var(--text-muted)", fontStyle: "italic", marginTop: 2 }}>{b.notes}</div>}
-                      </div>
-                    ))}
-                  </div>
+                  </button>
+
+                  {isOpen && (
+                    <div style={{ padding: "0 14px 14px" }}>
+                      {!isFull ? (
+                        <>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
+                            {blocks.map((b, i) => (
+                              <div key={i}>
+                                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5 }}>
+                                  <span style={{ color: "var(--text-muted)" }}>{b.slot}: <span style={{ color: "var(--text)" }}>{b.exercise}</span></span>
+                                  <span className="tabular" style={{ color: b.type === "time" ? "var(--time)" : "var(--text-muted)" }}>{fmtSetsList(b)}</span>
+                                </div>
+                                {b.attachment && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>Attachment: {b.attachment}</div>}
+                                {b.notes && <div style={{ fontSize: 11.5, color: "var(--text-muted)", fontStyle: "italic", marginTop: 2 }}>{b.notes}</div>}
+                              </div>
+                            ))}
+                          </div>
+                          <button
+                            onClick={() => setFullHistoryId(s.id)}
+                            style={{ width: "100%", padding: "8px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1px solid var(--border)", background: "transparent", color: "var(--text-muted)" }}
+                          >
+                            Show Full Detail
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 10 }}>
+                            {blocks.map((b, i) => (
+                              <div key={i} style={{ background: "var(--surface-2)", borderRadius: 10, padding: "10px 12px" }}>
+                                <div style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{b.slot}</div>
+                                <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: b.attachment || b.notes ? 4 : 8 }}>{b.exercise}</div>
+                                {b.attachment && <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>Attachment: {b.attachment}</div>}
+                                {b.notes && <div style={{ fontSize: 11.5, color: "var(--text-muted)", fontStyle: "italic", marginBottom: 8 }}>{b.notes}</div>}
+                                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                  {b.sets.map((st, si) => (
+                                    <div key={si} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                                      <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5 }}>
+                                        <span className="tabular" style={{ color: "var(--text-muted)", width: 34, flexShrink: 0 }}>Set {si + 1}</span>
+                                        <span className="tabular" style={{ color: b.type === "time" ? "var(--time)" : "var(--text)", fontWeight: 600 }}>
+                                          {b.type === "time"
+                                            ? (st.weight > 0 ? `+${st.weight} lb · ${st.value}s` : `${st.value}s`)
+                                            : `${st.weight} lb × ${st.value}`}
+                                        </span>
+                                      </div>
+                                      {st.extra && (
+                                        <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--text-muted)", paddingLeft: 41 }}>
+                                          <Layers size={10} style={{ flexShrink: 0 }} />
+                                          {st.extra.type === "superset" ? "Superset" : "Drop set"}: {st.extra.exercise} — <span className="tabular">{st.extra.weight} lb × {st.extra.value}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <button
+                            onClick={() => setFullHistoryId(null)}
+                            style={{ width: "100%", padding: "8px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1px solid var(--border)", background: "transparent", color: "var(--text-muted)" }}
+                          >
+                            Show Summary
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })
@@ -1658,10 +2729,12 @@ export default function WorkoutTracker() {
             </button>
             <button onClick={saveWorkout} disabled={saving} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px", borderRadius: 10, background: savedFlash ? "var(--success)" : "var(--accent)", border: "none", cursor: "pointer", fontSize: 14, fontWeight: 700, color: "var(--on-accent)" }}>
               {saving ? <Loader2 size={16} /> : <Save size={16} />}
-              {savedFlash ? "Saved" : saving ? "Saving…" : `Save Workout (${totalSets} set${totalSets > 1 ? "s" : ""})`}
+              {savedFlash ? "Saved" : saving ? "Saving…" : `${backfill ? "Save Past Workout" : "Save Workout"} (${totalSets} set${totalSets > 1 ? "s" : ""})`}
             </button>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );
