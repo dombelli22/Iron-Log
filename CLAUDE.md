@@ -39,11 +39,22 @@ repo's Settings → Pages → Source set to **"GitHub Actions"** once (not
   script and its `.diag` styling are deliberately kept inline (not in the
   bundled CSS/JS) so they still render if the app bundle itself fails to load.
 - `public/manifest.json` — PWA manifest (name, icons, `display: standalone`)
-- `public/sw.js` — minimal offline-caching service worker; bump the `CACHE`
-  constant when the precached shell files change so old caches get evicted
-- `public/icon-192.png`, `public/icon-512.png` — app icon (dark background,
-  red dumbbell), generated with Pillow, not a design tool — fine as a
-  placeholder, could be improved
+- `public/sw.js` — minimal service worker; bump the `CACHE` constant when
+  the precached shell files change so old caches get evicted. **Network-first**
+  fetch strategy (try the network, fall back to the cache only when
+  offline) — it started as cache-first/stale-while-revalidate, but that let
+  an already-installed PWA serve a stale `index.html` (pointing at an old,
+  Vite-content-hashed JS bundle from several deploys back) indefinitely
+  while online, since stale-while-revalidate always prefers the cache for
+  the *current* request and only refreshes the cache for next time. Given
+  how often this app ships updates, correctness beats the instant-from-cache
+  load feel; the cache now exists purely for offline fallback. A phone with
+  an already-stuck stale install self-corrects within the browser's own
+  (spec-mandated, ~24h max) service-worker update check, or immediately if
+  the user clears that site's data and reinstalls.
+- `public/icon-192.png`, `public/icon-512.png`, `public/apple-touch-icon.png`
+  — see "App icon & iOS launch" further down; it's a real photo now, not an
+  illustration
 - Everything under `public/` is copied as-is into `dist/` by Vite; nothing
   under `src/` is served directly — it's bundled.
 
