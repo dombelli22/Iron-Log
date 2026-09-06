@@ -409,7 +409,7 @@ function HomeScreen({ plans, activePlanId, onChoosePlan, onContinue, onStartBuil
   if (mode === "quizDays" || mode === "quizStyle") {
     const is5 = answers.days === 5;
     return (
-      <div style={{ padding: "24px 16px 60px", maxWidth: 520, margin: "0 auto" }}>
+      <div style={{ padding: "calc(24px + env(safe-area-inset-top)) 16px calc(60px + env(safe-area-inset-bottom))", maxWidth: 520, margin: "0 auto" }}>
         {header}
         <div style={{ height: 24 }} />
         <BackButton onClick={() => setMode(mode === "quizStyle" ? "quizDays" : "landing")} />
@@ -469,7 +469,7 @@ function HomeScreen({ plans, activePlanId, onChoosePlan, onContinue, onStartBuil
     const recommendedPlan = plans.find((p) => p.id === recommendPlanId(answers));
     const sessionCount = recommendedPlan ? Object.keys(recommendedPlan.days).length : 0;
     return (
-      <div style={{ padding: "24px 16px 60px", maxWidth: 520, margin: "0 auto" }}>
+      <div style={{ padding: "calc(24px + env(safe-area-inset-top)) 16px calc(60px + env(safe-area-inset-bottom))", maxWidth: 520, margin: "0 auto" }}>
         {header}
         <div style={{ height: 24 }} />
         <BackButton onClick={() => setMode(answers.days === 5 || answers.days === 6 ? "quizStyle" : "quizDays")} />
@@ -498,7 +498,7 @@ function HomeScreen({ plans, activePlanId, onChoosePlan, onContinue, onStartBuil
 
   if (mode === "browse") {
     return (
-      <div style={{ padding: "24px 16px 60px", maxWidth: 520, margin: "0 auto" }}>
+      <div style={{ padding: "calc(24px + env(safe-area-inset-top)) 16px calc(60px + env(safe-area-inset-bottom))", maxWidth: 520, margin: "0 auto" }}>
         {header}
         <div style={{ height: 24 }} />
         <BackButton onClick={() => setMode("landing")} />
@@ -535,7 +535,7 @@ function HomeScreen({ plans, activePlanId, onChoosePlan, onContinue, onStartBuil
 
   // mode === "landing"
   return (
-    <div style={{ padding: "24px 16px 60px", maxWidth: 520, margin: "0 auto" }}>
+    <div style={{ padding: "calc(24px + env(safe-area-inset-top)) 16px calc(60px + env(safe-area-inset-bottom))", maxWidth: 520, margin: "0 auto" }}>
       {header}
       <div className="display" style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center", letterSpacing: "0.08em", marginBottom: 28 }}>
         Choose Your Workout Split
@@ -593,7 +593,7 @@ function ScheduleScreen({ plan, schedule, onSave, onBack }) {
   const assignedCount = WEEKDAYS.filter((w) => draft[w]).length;
 
   return (
-    <div style={{ padding: "24px 16px 60px", maxWidth: 520, margin: "0 auto" }}>
+    <div style={{ padding: "calc(24px + env(safe-area-inset-top)) 16px calc(60px + env(safe-area-inset-bottom))", maxWidth: 520, margin: "0 auto" }}>
       <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: 16, color: "var(--text-muted)", fontSize: 12 }}>
         ‹ Back to Plans
       </button>
@@ -643,7 +643,7 @@ function AddPastWorkoutSetup({ plan, onStart, onBack }) {
   const dayKeys = Object.keys(plan.days);
 
   return (
-    <div style={{ padding: "24px 16px 60px", maxWidth: 520, margin: "0 auto" }}>
+    <div style={{ padding: "calc(24px + env(safe-area-inset-top)) 16px calc(60px + env(safe-area-inset-bottom))", maxWidth: 520, margin: "0 auto" }}>
       <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: 16, color: "var(--text-muted)", fontSize: 12 }}>
         ‹ Back to History
       </button>
@@ -835,7 +835,7 @@ function BuildPlanScreen({ existingPlans, onSave, onCancel }) {
   }
 
   const shell = (backTo, content) => (
-    <div style={{ padding: "24px 16px 60px", maxWidth: 520, margin: "0 auto" }}>
+    <div style={{ padding: "calc(24px + env(safe-area-inset-top)) 16px calc(60px + env(safe-area-inset-bottom))", maxWidth: 520, margin: "0 auto" }}>
       {header}
       <div style={{ height: 24 }} />
       <BackButton onClick={backTo} />
