@@ -85,6 +85,29 @@ appearing in both `"Quads — Primary"` and `"Glutes"`) needs nothing extra.
 A `"Rear Delts"` / `"Shoulders — Rear"` naming split that pre-dated this
 consolidation was merged into one `"Rear Delts"` slot name.
 
+Traps used to be an afterthought — `"Barbell Shrug"`/`"DB Shrug"` sat
+bolted onto the deadlift/pullover slot (then named
+`"Back — Lower Lat / Traps"`), and `"Upright Row"` in `"Shoulders — Side"`
+was the only other trap-adjacent movement. That slot was renamed to
+`"Back — Lower Lat"` (shrugs removed) and a dedicated `"Shoulders — Traps"`
+slot added — deliberately named with the `"Shoulders — "` prefix rather
+than a standalone `"Traps"` slot so it groups under the existing
+"Shoulders" body-part bucket in the guided add-exercise flow (see
+`bodyParts` below) rather than becoming its own top-level part. It carries
+6 shrug variants (barbell, DB, trap bar, Smith machine, cable,
+behind-the-back, snatch-grip), 3 upright rows (barbell — reused from
+`"Shoulders — Side"`, cable, DB), a lower-trap-focused Y-Raise, and a
+timed Farmer's Carry (grip/traps carry, logged as a hold like the other
+`T()` exercises rather than reps). Every plan that used to reach traps via
+the old combined slot now gets `"Shoulders — Traps"` added alongside
+whatever day already carries some other shoulder work for that plan (Front
+Delts, Rear Delts, etc.) — for Bro Split and Arnold specifically, that
+meant moving it off the old Back/Chest&Back day onto the dedicated
+Shoulders (Bro Split) or Shoulders & Arms (Arnold) day instead, not just
+carrying it over under the old day, to keep it consistently a "shoulders"
+muscle across every plan rather than a "back" one in some and "shoulders"
+in others.
+
 - `days` has the same per-day shape as the original single plan: keyed by a
   unique day name, each `{ label, subtitle, tab, slots }`. The day *tabs* in
   the app show the assigned real weekday (see schedules below), not `tab` —

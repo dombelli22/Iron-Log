@@ -75,15 +75,13 @@ const SLOT_LIBRARY = {
     R("Machine Row", "Machine"),
     R("Inverted Row", "Bodyweight"),
   ],
-  "Back — Lower Lat / Traps": [
+  "Back — Lower Lat": [
     R("Barbell Deadlift", "Barbell"),
     R("Rack Pull", "Barbell"),
     R("DB Deadlift", "Dumbbell"),
     R("Straight-Arm Pulldown", "Cable"),
     R("Cable Pullover", "Cable"),
     R("DB Pullover", "Dumbbell"),
-    R("Barbell Shrug", "Barbell"),
-    R("DB Shrug", "Dumbbell"),
   ],
   "Biceps — Long Head": [
     R("Bayesian Curl", "Cable"),
@@ -155,6 +153,20 @@ const SLOT_LIBRARY = {
     R("Machine Lateral Raise", "Machine"),
     R("Incline DB Lateral Raise", "Dumbbell"),
     R("Upright Row", "Barbell"),
+  ],
+  "Shoulders — Traps": [
+    R("Barbell Shrug", "Barbell"),
+    R("DB Shrug", "Dumbbell"),
+    R("Trap Bar Shrug", "Barbell"),
+    R("Smith Machine Shrug", "Machine"),
+    R("Cable Shrug", "Cable"),
+    R("Behind-the-Back Barbell Shrug", "Barbell"),
+    R("Snatch-Grip Shrug", "Barbell"),
+    R("Upright Row", "Barbell"),
+    R("Cable Upright Row", "Cable"),
+    R("DB Upright Row", "Dumbbell"),
+    R("Y-Raise", "Dumbbell"),
+    T("Farmer's Carry", "Dumbbell"),
   ],
   "Arms — Biceps": [
     R("Barbell or EZ-Bar Curl", "EZ-Bar"),
@@ -251,7 +263,7 @@ const ORIGINAL_DAYS = {
     label: "Pull",
     subtitle: "Back, Biceps, Rear Delts",
     tab: "Pull",
-    slots: slots("Back — Width", "Back — Thickness", "Back — Lower Lat / Traps", "Biceps — Long Head", "Biceps — Short Head", "Biceps — Brachialis", "Rear Delts"),
+    slots: slots("Back — Width", "Back — Thickness", "Back — Lower Lat", "Shoulders — Traps", "Biceps — Long Head", "Biceps — Short Head", "Biceps — Brachialis", "Rear Delts"),
   },
   Legs: {
     label: "Legs",
@@ -287,7 +299,7 @@ const PPL_DAYS = {
     label: "Pull",
     subtitle: "Back, Biceps, Rear Delts",
     tab: "Pull 1",
-    slots: slots("Back — Width", "Back — Thickness", "Back — Lower Lat / Traps", "Biceps — Long Head", "Biceps — Short Head", "Biceps — Brachialis", "Rear Delts"),
+    slots: slots("Back — Width", "Back — Thickness", "Back — Lower Lat", "Shoulders — Traps", "Biceps — Long Head", "Biceps — Short Head", "Biceps — Brachialis", "Rear Delts"),
   },
   "Legs 1": {
     label: "Legs",
@@ -305,7 +317,7 @@ const PPL_DAYS = {
     label: "Pull",
     subtitle: "Back, Biceps, Rear Delts",
     tab: "Pull 2",
-    slots: slots("Back — Width", "Back — Thickness", "Back — Lower Lat / Traps", "Biceps — Long Head", "Biceps — Short Head", "Biceps — Brachialis", "Rear Delts"),
+    slots: slots("Back — Width", "Back — Thickness", "Back — Lower Lat", "Shoulders — Traps", "Biceps — Long Head", "Biceps — Short Head", "Biceps — Brachialis", "Rear Delts"),
   },
   "Legs 2": {
     label: "Legs",
@@ -335,9 +347,9 @@ const UPPER_LOWER_DAYS = {
   },
   "Upper 2": {
     label: "Upper",
-    subtitle: "Back Lower Lat / Traps, Arms by Head, Front Delts",
+    subtitle: "Back Lower Lat, Traps, Arms by Head, Front Delts",
     tab: "Upper 2",
-    slots: slots("Chest — Middle", "Back — Lower Lat / Traps", "Triceps — Long Head", "Triceps — Lateral Head", "Triceps — Medial Head", "Biceps — Long Head", "Biceps — Short Head", "Biceps — Brachialis", "Front Delts"),
+    slots: slots("Chest — Middle", "Back — Lower Lat", "Shoulders — Traps", "Triceps — Long Head", "Triceps — Lateral Head", "Triceps — Medial Head", "Biceps — Long Head", "Biceps — Short Head", "Biceps — Brachialis", "Front Delts"),
   },
   "Lower 2": {
     label: "Lower",
@@ -367,9 +379,9 @@ const FULL_BODY_DAYS = {
   },
   "Full Body C": {
     label: "Full Body",
-    subtitle: "Chest, Back, Quads, Hamstrings, Rear Delts, Arms, Calves",
+    subtitle: "Chest, Back, Quads, Hamstrings, Rear Delts, Traps, Arms, Calves",
     tab: "Day C",
-    slots: slots("Chest — Lower", "Back — Lower Lat / Traps", "Quads — Primary", "Hamstrings", "Rear Delts", "Biceps — Long Head", "Triceps — Medial Head", "Calves"),
+    slots: slots("Chest — Lower", "Back — Lower Lat", "Quads — Primary", "Hamstrings", "Rear Delts", "Shoulders — Traps", "Biceps — Long Head", "Triceps — Medial Head", "Calves"),
   },
 };
 
@@ -387,15 +399,15 @@ const BRO_SPLIT_DAYS = {
   },
   "Back Day": {
     label: "Back",
-    subtitle: "Width, Thickness, Lower Lat / Traps",
+    subtitle: "Width, Thickness, Lower Lat",
     tab: "Back",
-    slots: slots("Back — Width", "Back — Thickness", "Back — Lower Lat / Traps"),
+    slots: slots("Back — Width", "Back — Thickness", "Back — Lower Lat"),
   },
   "Shoulders Day": {
     label: "Shoulders",
-    subtitle: "Front, Side, Rear",
+    subtitle: "Front, Side, Rear, Traps",
     tab: "Shoulders",
-    slots: slots("Shoulders — Front/Mid", "Front Delts", "Shoulders — Side", "Rear Delts"),
+    slots: slots("Shoulders — Front/Mid", "Front Delts", "Shoulders — Side", "Rear Delts", "Shoulders — Traps"),
   },
   "Arms Day": {
     label: "Arms",
@@ -437,15 +449,15 @@ const ARNOLD_DAYS = {
   },
   "Arnold Chest & Back 2": {
     label: "Chest & Back",
-    subtitle: "Chest Lower, Back Lower Lat / Traps",
+    subtitle: "Chest Lower, Back Lower Lat",
     tab: "Chest & Back 2",
-    slots: slots("Chest — Lower", "Back — Lower Lat / Traps"),
+    slots: slots("Chest — Lower", "Back — Lower Lat"),
   },
   "Arnold Shoulders & Arms 2": {
     label: "Shoulders & Arms",
-    subtitle: "Front/Mid Delts, Rear Delts, Triceps, Biceps",
+    subtitle: "Front/Mid Delts, Rear Delts, Traps, Triceps, Biceps",
     tab: "Shoulders & Arms 2",
-    slots: slots("Shoulders — Front/Mid", "Rear Delts", "Triceps — Medial Head", "Biceps — Brachialis"),
+    slots: slots("Shoulders — Front/Mid", "Rear Delts", "Shoulders — Traps", "Triceps — Medial Head", "Biceps — Brachialis"),
   },
   "Arnold Legs 2": {
     label: "Legs",
