@@ -358,8 +358,8 @@ Two things the Plan Editor now supports that it originally didn't:
   effective slot carries `name` (library slot name — what History and the
   exercise catalog use), `key` (unique within the day: equals `name` for the
   first occurrence, `name#<id>` for Plan-Editor-added instances, `name#2`…
-  for duplicate base names), `label` (shown to the user — "Chest — Upper",
-  then "Chest — Upper (2)"), plus `source`/`addedId` so `removePermanentSlot`
+  for duplicate base names), `label` (shown to the user — always just the
+  body part name; duplicates are deliberately *not* numbered), plus `source`/`addedId` so `removePermanentSlot`
   can tell a base slot (goes into `removed`) from an added instance (dropped
   from `added` by id). **All per-slot logging state is keyed by `slot.key`,
   not name**: `draft[day]`, `hiddenSlots`, `openSlot`, and

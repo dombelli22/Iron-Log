@@ -2022,7 +2022,7 @@ function BuildPlanScreen({ existingPlans, onSave, onCancel }) {
 // History and the exercise catalog use), `key` (unique within the day; equals
 // `name` unless the same body part appears more than once, which is what lets
 // draft/hidden/last-used state stay separate per instance), `label` (what the
-// user sees — "Chest — Upper", then "Chest — Upper (2)"), and `source`/
+// user sees — just the body part name, repeated, with no "(2)" suffix), and `source`/
 // `addedId` (so the Plan Editor knows how to remove it).
 function buildEffectiveSlots(baseSlots, override) {
   const removed = (override && override.removed) || [];
@@ -2036,7 +2036,7 @@ function buildEffectiveSlots(baseSlots, override) {
       name,
       exercises,
       key: preferredKey || (n === 1 ? name : `${name}#${n}`),
-      label: n === 1 ? name : `${name} (${n})`,
+      label: name,
       source,
       addedId,
     });
