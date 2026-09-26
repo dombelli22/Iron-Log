@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Dumbbell, Plus, Trash2, ChevronDown, Save, X, Loader2, History as HistoryIcon, RotateCcw, Timer, TrendingUp, Layers, Home as HomeIcon, Pencil } from "lucide-react";
 import { storage } from "./storage";
-import { useCloud, sync, signIn, signUp, signOut, resetPassword } from "./cloud";
+import { useCloud, sync, signIn, signUp, signOut, resetPassword, setNewPassword, dismissRecovery } from "./cloud";
 import { PLAN_LIBRARY, ALL_DAYS_BY_KEY, WEEKDAYS, getScheduledDay, GLOBAL_SLOT_LIBRARY, GLOBAL_SLOT_NAMES, GLOBAL_EXERCISE_LIST, GENERIC_BODY_PARTS } from "./plans";
 import BodyModel from "react-body-highlighter";
 
@@ -905,6 +905,46 @@ async function downloadBackup() {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
   return "downloaded";
+}
+
+// Shown over everything when the app is opened from a password-reset email link.
+function SetPasswordScreen() {
+  const [pw, setPw] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const fieldStyle = { width: "100%", padding: "11px 12px", borderRadius: 10, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 14, marginBottom: 12 };
+  const labelStyle = { fontSize: 10.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700, marginBottom: 6 };
+  const ok = pw.length >= 6 && pw === pw2 && !busy;
+  async function submit(e) {
+    e.preventDefault();
+    if (!ok) return;
+    setBusy(true); setError("");
+    try { await setNewPassword(pw); } catch (err) {
+      const m = (err && err.message) || "";
+      setError(/same|different/i.test(m) ? "Choose a password different from your old one." : /failed to fetch|network/i.test(m) ? "Couldn't reach the server. Check your connection and try again." : m || "Something went wrong.");
+      setBusy(false);
+    }
+  }
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 60, overflowY: "auto", background: "var(--bg)", color: "var(--text)", fontFamily: "'Inter', sans-serif" }}>
+      <form onSubmit={submit} style={{ padding: "calc(40px + env(safe-area-inset-top)) 16px calc(60px + env(safe-area-inset-bottom))", maxWidth: 520, margin: "0 auto" }}>
+        <div className="display" style={{ fontSize: 18, marginBottom: 6 }}>Set a New Password</div>
+        <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 20 }}>You're signed in from your reset link. Choose a new password to finish.</div>
+        <div style={labelStyle}>New Password</div>
+        <input type="password" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} style={fieldStyle} />
+        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: -6, marginBottom: 12 }}>At least 6 characters.</div>
+        <div style={labelStyle}>Confirm Password</div>
+        <input type="password" autoComplete="new-password" value={pw2} onChange={(e) => setPw2(e.target.value)} style={fieldStyle} />
+        {pw2 && pw !== pw2 && <div style={{ fontSize: 12.5, color: "var(--danger)", marginBottom: 12 }}>Passwords don't match.</div>}
+        {error && <div style={{ fontSize: 12.5, color: "var(--danger)", marginBottom: 12, lineHeight: 1.4 }}>{error}</div>}
+        <button type="submit" disabled={!ok} style={{ width: "100%", padding: "13px", borderRadius: 10, background: ok ? "var(--accent)" : "var(--surface-2)", border: "none", cursor: ok ? "pointer" : "not-allowed", fontSize: 14, fontWeight: 700, color: ok ? "var(--on-accent)" : "var(--text-muted)", boxShadow: ok ? PRIMARY_SHADOW : "none" }}>
+          {busy ? "Saving…" : "Save Password"}
+        </button>
+        <button type="button" onClick={dismissRecovery} style={{ display: "block", margin: "8px auto 0", background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: 12.5, padding: "10px", textDecoration: "underline" }}>Skip for now</button>
+      </form>
+    </div>
+  );
 }
 
 function AccountScreen({ onBack }) {
@@ -2385,6 +2425,7 @@ export default function WorkoutTracker() {
   // Bumped whenever cloud sync pulls newer data into localStorage; every load
   // effect below depends on it, so state re-reads from storage.
   const [dataVersion, setDataVersion] = useState(0);
+  const cloudState = useCloud();
   useEffect(() => sync.onRemoteApplied(() => setDataVersion((v) => v + 1)), []);
 
   useEffect(() => {
@@ -3431,6 +3472,7 @@ export default function WorkoutTracker() {
 
   return (
     <div style={{ background: "var(--bg)", minHeight: "100%", color: "var(--text)", fontFamily: "'Inter', sans-serif" }}>
+      {cloudState.recovery && <SetPasswordScreen />}
       <PageBackground image={bgImage} />
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Metal+Mania&family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap');

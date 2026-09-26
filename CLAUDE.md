@@ -872,7 +872,12 @@ just says cloud accounts aren't on — nothing else changes.
   hook, and triggers (`online`, tab visible/hidden, `pagehide`).
   `WorkoutTracker` has a `dataVersion` counter bumped by
   `sync.onRemoteApplied`; every startup load effect depends on it, so pulled
-  data flows into React state. Password-reset *landing* UI isn't built yet.
+  data flows into React state. Password reset: "Forgot password?" emails a link
+  back to the app; opening it fires Supabase's `PASSWORD_RECOVERY` event, which
+  `cloud.js` turns into `recovery: true`, and `WorkoutTracker` then overlays
+  `SetPasswordScreen` (new + confirm password → `setNewPassword`; "Skip for
+  now" → `dismissRecovery`). Only exercised end-to-end with a real reset
+  email; in development the event was simulated.
 - Not yet built (roadmap): usernames/public profiles + privacy, follows and
   a shared feed, likes/comments, discovery, report/block/delete-account.
 

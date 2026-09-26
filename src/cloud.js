@@ -25,7 +25,7 @@ export const sync = createSync({
   isOnline: () => (typeof navigator === "undefined" ? true : navigator.onLine !== false),
 });
 
-let auth = { ready: !cloudConfigured, user: null };
+let auth = { ready: !cloudConfigured, user: null, recovery: false };
 const authListeners = new Set();
 const setAuth = (patch) => { auth = { ...auth, ...patch }; authListeners.forEach((fn) => fn()); };
 
@@ -47,6 +47,8 @@ async function onSession(session) {
 if (supabase) {
   setWriteListener((key) => sync.notifyLocalWrite(key));
   supabase.auth.onAuthStateChange((event, session) => {
+    // Arriving from a password-reset email link: show the "set a new password" screen.
+    if (event === "PASSWORD_RECOVERY") setAuth({ recovery: true });
     // Defer: Supabase forbids awaiting other client calls inside this callback.
     setTimeout(() => { onSession(session); }, 0);
   });
@@ -72,6 +74,13 @@ export async function signOut() {
   await sync.flush().catch(() => {});
   await supabase.auth.signOut();
 }
+// Used on the screen a reset-email link lands on (a temporary recovery session is already active).
+export async function setNewPassword(password) {
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) throw error;
+  setAuth({ recovery: false });
+}
+export function dismissRecovery() { setAuth({ recovery: false }); }
 export async function resetPassword(email) {
   const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + window.location.pathname });
   if (error) throw error;
@@ -85,5 +94,5 @@ export function useCloud() {
   const a = useSyncExternalStore(subscribeAuth, getAuth);
   const [s, setS] = useState(sync.getState());
   useEffect(() => sync.subscribe(setS), []);
-  return { configured: cloudConfigured, ready: a.ready, user: a.user, sync: s };
+  return { configured: cloudConfigured, ready: a.ready, user: a.user, recovery: a.recovery, sync: s };
 }
