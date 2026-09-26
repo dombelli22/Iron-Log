@@ -725,12 +725,396 @@ const homeChoiceButtonStyle = {
 };
 const PRIMARY_SHADOW = "0 4px 14px rgba(214,41,59,0.35)";
 
+// ---------------------------------------------------------------------------
+// Profile. The saved record (`profile`: displayName, bio, goal, photo,
+// createdAt) is tiny and lives in localStorage; everything else on the
+// profile page — totals, streaks, top lifts — is derived from History on the
+// fly by `computeProfileStats`, never stored, so it can't drift out of sync
+// with edits/deletes made to past workouts.
+// ---------------------------------------------------------------------------
+const PROFILE_GOALS = ["Build muscle", "Get stronger", "Lose fat", "Stay consistent", "Athletic performance"];
+
+const localISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+function previousWeekKey(weekKey) {
+  const d = new Date(`${weekKey}T00:00:00`);
+  d.setDate(d.getDate() - 7);
+  return mondayOf(localISO(d));
+}
+
+function computeProfileStats(history) {
+  let sets = 0;
+  let volume = 0;
+  const weeks = new Set();
+  const setsByExercise = {};
+  const best = {};
+  history.forEach((session) => {
+    weeks.add(weekKeyFor(session.date));
+    (session.blocks || []).forEach((b) => {
+      setsByExercise[b.exercise] = (setsByExercise[b.exercise] || 0) + b.sets.length;
+      b.sets.forEach((st) => {
+        sets += 1;
+        if (b.type === "reps") volume += st.weight * st.value;
+        if (st.extra) volume += st.extra.weight * st.extra.value;
+        // Personal bests: heaviest weight, reps breaking a tie; bodyweight/timed sets have no weight to rank.
+        if (b.type === "reps" && st.weight > 0) {
+          const cur = best[b.exercise];
+          if (!cur || st.weight > cur.weight || (st.weight === cur.weight && st.value > cur.value)) {
+            best[b.exercise] = { exercise: b.exercise, weight: st.weight, value: st.value, date: session.date };
+          }
+        }
+      });
+    });
+  });
+
+  // Current streak counts consecutive weeks with a workout, ending this week
+  // — or last week if this week hasn't had one yet, so it doesn't read as
+  // broken until the week is actually over.
+  const thisWeek = weekKeyFor(todayISO());
+  let cursor = weeks.has(thisWeek) ? thisWeek : previousWeekKey(thisWeek);
+  let currentStreak = 0;
+  while (weeks.has(cursor)) { currentStreak += 1; cursor = previousWeekKey(cursor); }
+  let longestStreak = 0;
+  [...weeks].sort().forEach((w) => {
+    let run = 1;
+    let c = previousWeekKey(w);
+    while (weeks.has(c)) { run += 1; c = previousWeekKey(c); }
+    if (run > longestStreak) longestStreak = run;
+  });
+
+  const mostTrained = Object.entries(setsByExercise).sort((a, b) => b[1] - a[1])[0];
+  const dates = history.map((h) => h.date).sort();
+  return {
+    workouts: history.length,
+    sets,
+    volume,
+    currentStreak,
+    longestStreak,
+    thisWeek: history.filter((h) => weekKeyFor(h.date) === thisWeek).length,
+    topLifts: Object.values(best).sort((a, b) => b.weight - a.weight || b.value - a.value).slice(0, 5),
+    mostTrained: mostTrained ? { exercise: mostTrained[0], sets: mostTrained[1] } : null,
+    firstWorkout: dates[0] || null,
+  };
+}
+
+// Center-crops to a square and downsizes so a profile photo stays a few KB —
+// it's stored as a data URL in localStorage, which has a small quota.
+function resizeImageToDataUrl(file, size = 256) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const side = Math.min(img.width, img.height);
+        canvas.getContext("2d").drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
+        resolve(canvas.toDataURL("image/jpeg", 0.82));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function Avatar({ profile, size = 40 }) {
+  const name = (profile && profile.displayName) || "";
+  const initials = name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+  const base = { width: size, height: size, borderRadius: "50%", flexShrink: 0, border: "1px solid var(--border)" };
+  if (profile && profile.photo) {
+    return <img src={profile.photo} alt="" style={{ ...base, objectFit: "cover", display: "block" }} />;
+  }
+  return (
+    <div className="display" style={{ ...base, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--accent-dim)", color: "var(--accent)", fontSize: size * 0.4 }}>
+      {initials || <Dumbbell size={size * 0.45} color="var(--accent)" />}
+    </div>
+  );
+}
+
+// One line per exercise for a feed post: "100×10, 105×8" (or "45s" for holds).
+function summarizeSets(block) {
+  return block.sets
+    .map((st) => (block.type === "time" ? `${st.weight > 0 ? `+${st.weight} lb · ` : ""}${st.value}s` : `${st.weight}×${st.value}`))
+    .join(", ");
+}
+
+// For each saved session, which lifts beat the lifter's previous best *as of
+// that day* — replayed oldest→newest, so a session keeps its PR badge even
+// after you've since gone heavier. A first-ever log of an exercise isn't a PR
+// (there was nothing to beat).
+function computeSessionPRs(history) {
+  const ordered = history.map((s, i) => ({ s, i })).sort((a, b) => a.s.date.localeCompare(b.s.date) || a.i - b.i);
+  const bests = {};
+  const out = {};
+  ordered.forEach(({ s }) => {
+    const sessionBest = {};
+    (s.blocks || []).forEach((b) => {
+      if (b.type !== "reps") return;
+      b.sets.forEach((st) => {
+        if (!(st.weight > 0)) return;
+        const cur = sessionBest[b.exercise];
+        if (!cur || st.weight > cur.weight || (st.weight === cur.weight && st.value > cur.value)) sessionBest[b.exercise] = { exercise: b.exercise, weight: st.weight, value: st.value };
+      });
+    });
+    const prs = [];
+    Object.values(sessionBest).forEach((sb) => {
+      const prev = bests[sb.exercise];
+      if (prev && (sb.weight > prev.weight || (sb.weight === prev.weight && sb.value > prev.value))) prs.push(sb);
+      if (!prev || sb.weight > prev.weight || (sb.weight === prev.weight && sb.value > prev.value)) bests[sb.exercise] = sb;
+    });
+    out[s.id] = prs;
+  });
+  return out;
+}
+
+function sessionTotals(blocks) {
+  let volume = 0;
+  let sets = 0;
+  blocks.forEach((b) => b.sets.forEach((st) => {
+    sets += 1;
+    if (b.type === "reps") volume += st.weight * st.value;
+    if (st.extra) volume += st.extra.weight * st.extra.value;
+  }));
+  return { volume, sets };
+}
+
+const FEED_PAGE = 10;
+const FEED_PREVIEW_EXERCISES = 4;
+
+function ProfileScreen({ profile, stats, history, dayLabelFor, onSave, onBack }) {
+  const hasProfile = !!(profile && profile.displayName);
+  const [editing, setEditing] = useState(!hasProfile);
+  const [draft, setDraft] = useState({ displayName: "", bio: "", goal: "", photo: "", ...(profile || {}) });
+  const [photoError, setPhotoError] = useState(false);
+  const fileRef = useRef(null);
+  const [feedCount, setFeedCount] = useState(FEED_PAGE);
+  const [openPostId, setOpenPostId] = useState(null);
+  // Newest first; same-date sessions keep most-recently-logged on top (same rule as History).
+  const feed = useMemo(() => [...history].reverse().sort((a, b) => b.date.localeCompare(a.date)), [history]);
+  const prsBySession = useMemo(() => computeSessionPRs(history), [history]);
+
+  async function pickPhoto(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      setPhotoError(false);
+      const photo = await resizeImageToDataUrl(file);
+      setDraft((d) => ({ ...d, photo }));
+    } catch (err) {
+      setPhotoError(true);
+    }
+  }
+
+  function save() {
+    onSave({ ...draft, displayName: draft.displayName.trim(), bio: draft.bio.trim(), createdAt: (profile && profile.createdAt) || todayISO() });
+    setEditing(false);
+  }
+
+  const fieldStyle = { width: "100%", padding: "11px 12px", borderRadius: 10, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 14 };
+  const labelStyle = { fontSize: 10.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700, marginBottom: 6 };
+  const shell = { padding: "calc(24px + env(safe-area-inset-top)) 16px calc(60px + env(safe-area-inset-bottom))", maxWidth: 520, margin: "0 auto" };
+
+  if (editing) {
+    return (
+      <div style={shell}>
+        <button onClick={hasProfile ? () => { setEditing(false); setDraft({ displayName: "", bio: "", goal: "", photo: "", ...profile }); } : onBack} style={backLinkStyle}>
+          {hasProfile ? "‹ Cancel" : "‹ Back"}
+        </button>
+        <div className="display" style={{ fontSize: 18, marginBottom: 4 }}>{hasProfile ? "Edit Profile" : "Set Up Your Profile"}</div>
+        <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 20 }}>
+          Stored only on this device for now.
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20 }}>
+          <Avatar profile={draft} size={72} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <button onClick={() => fileRef.current && fileRef.current.click()} style={{ ...homeChoiceButtonStyle, width: "auto", padding: "9px 14px", fontSize: 13, fontWeight: 600 }}>
+              {draft.photo ? "Change Photo" : "Add Photo"}
+            </button>
+            {draft.photo && (
+              <button onClick={() => setDraft((d) => ({ ...d, photo: "" }))} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: 12, textAlign: "left", padding: 0 }}>
+                Remove photo
+              </button>
+            )}
+          </div>
+          <input ref={fileRef} type="file" accept="image/*" onChange={pickPhoto} style={{ display: "none" }} />
+        </div>
+        {photoError && <div style={{ fontSize: 12, color: "var(--danger)", marginBottom: 12 }}>Couldn't read that image — try a different one.</div>}
+
+        <div style={labelStyle}>Display Name</div>
+        <input type="text" maxLength={30} value={draft.displayName} onChange={(e) => setDraft((d) => ({ ...d, displayName: e.target.value }))} placeholder="Your name" style={{ ...fieldStyle, marginBottom: 16 }} />
+
+        <div style={labelStyle}>Main Goal</div>
+        <select value={draft.goal} onChange={(e) => setDraft((d) => ({ ...d, goal: e.target.value }))} style={{ ...fieldStyle, marginBottom: 16 }}>
+          <option value="">No goal set</option>
+          {PROFILE_GOALS.map((g) => <option key={g} value={g}>{g}</option>)}
+        </select>
+
+        <div style={labelStyle}>Bio</div>
+        <textarea rows={3} maxLength={160} value={draft.bio} onChange={(e) => setDraft((d) => ({ ...d, bio: e.target.value }))} placeholder="A line about you and your training" style={{ ...fieldStyle, marginBottom: 4, lineHeight: 1.4 }} />
+        <div style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "right", marginBottom: 20 }}>{draft.bio.length}/160</div>
+
+        <button
+          onClick={save}
+          disabled={!draft.displayName.trim()}
+          style={{ width: "100%", padding: "13px", borderRadius: 10, background: !draft.displayName.trim() ? "var(--surface-2)" : "var(--accent)", border: "none", cursor: !draft.displayName.trim() ? "not-allowed" : "pointer", fontSize: 14, fontWeight: 700, color: !draft.displayName.trim() ? "var(--text-muted)" : "var(--on-accent)", boxShadow: !draft.displayName.trim() ? "none" : PRIMARY_SHADOW }}
+        >
+          Save Profile
+        </button>
+      </div>
+    );
+  }
+
+  const since = (profile.createdAt && stats.firstWorkout ? [profile.createdAt, stats.firstWorkout].sort()[0] : profile.createdAt || stats.firstWorkout);
+  const tile = (value, label) => (
+    <div style={{ flex: 1, padding: "14px 12px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "0 2px 8px rgba(0,0,0,0.28)" }}>
+      <div className="display tabular" style={{ fontSize: 22, color: "var(--accent)" }}>{value}</div>
+      <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{label}</div>
+    </div>
+  );
+
+  return (
+    <div style={shell}>
+      <button onClick={onBack} style={backLinkStyle}>‹ Back</button>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 16 }}>
+        <Avatar profile={profile} size={84} />
+        <div style={{ minWidth: 0 }}>
+          <div className="display" style={{ fontSize: 22, overflowWrap: "anywhere" }}>{profile.displayName}</div>
+          {profile.goal && (
+            <span style={{ display: "inline-block", marginTop: 6, fontSize: 11, fontWeight: 700, background: "var(--accent-dim)", color: "var(--accent)", borderRadius: 999, padding: "2px 10px" }}>{profile.goal}</span>
+          )}
+        </div>
+      </div>
+      {profile.bio && <div style={{ fontSize: 13.5, lineHeight: 1.5, marginBottom: 14, overflowWrap: "anywhere" }}>{profile.bio}</div>}
+      <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginBottom: 14 }}>
+        {since ? `Training since ${fmtDate(since)}` : "Just getting started"}
+      </div>
+      <button onClick={() => setEditing(true)} style={{ ...homeChoiceButtonStyle, padding: "10px", textAlign: "center", fontSize: 13, fontWeight: 600, marginBottom: 24 }}>
+        Edit Profile
+      </button>
+
+      <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+        {tile(stats.workouts.toLocaleString(), "Workouts")}
+        {tile(stats.volume.toLocaleString(), "Total lb lifted")}
+      </div>
+      <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+        {tile(`${stats.currentStreak} wk`, "Current streak")}
+        {tile(`${stats.longestStreak} wk`, "Longest streak")}
+      </div>
+      <div style={{ display: "flex", gap: 10, marginBottom: 24 }}>
+        {tile(stats.thisWeek, "This week")}
+        {tile(stats.sets.toLocaleString(), "Sets logged")}
+      </div>
+
+      <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700, marginBottom: 10 }}>Top Lifts</div>
+      {stats.topLifts.length === 0 ? (
+        <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 24 }}>Log a weighted workout and your heaviest sets show up here.</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 24 }}>
+          {stats.topLifts.map((l) => (
+            <div key={l.exercise} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "12px 14px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)" }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, overflowWrap: "anywhere" }}>{l.exercise}</div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{fmtDate(l.date)}</div>
+              </div>
+              <div className="display tabular" style={{ fontSize: 15, color: "var(--accent)", flexShrink: 0 }}>{l.weight} lb × {l.value}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {stats.mostTrained && (
+        <>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700, marginBottom: 10 }}>Most Trained</div>
+          <div style={{ padding: "12px 14px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)" }}>
+            <div style={{ fontSize: 13.5, fontWeight: 600, overflowWrap: "anywhere" }}>{stats.mostTrained.exercise}</div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{stats.mostTrained.sets} sets logged</div>
+          </div>
+        </>
+      )}
+
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", margin: "28px 0 10px", paddingTop: 18, borderTop: "1px solid var(--border)" }}>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700 }}>Workouts</div>
+        <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{feed.length} total</div>
+      </div>
+      {feed.length === 0 ? (
+        <div style={{ fontSize: 12.5, color: "var(--text-muted)", textAlign: "center", padding: "24px 0" }}>
+          No workouts yet. Finish a session and it shows up here.
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {feed.slice(0, feedCount).map((session) => {
+            const blocks = session.blocks || [];
+            const totals = sessionTotals(blocks);
+            const prs = prsBySession[session.id] || [];
+            const isOpen = openPostId === session.id;
+            const shown = isOpen ? blocks : blocks.slice(0, FEED_PREVIEW_EXERCISES);
+            const hidden = blocks.length - FEED_PREVIEW_EXERCISES;
+            return (
+              <div key={session.id} style={{ padding: "14px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "0 2px 8px rgba(0,0,0,0.28)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                  <Avatar profile={profile} size={34} />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 13, overflowWrap: "anywhere" }}>
+                      <span style={{ fontWeight: 700 }}>{profile.displayName}</span>
+                      <span style={{ color: "var(--text-muted)" }}> · {fmtDate(session.date)}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="display" style={{ fontSize: 15, marginBottom: 8, overflowWrap: "anywhere" }}>{dayLabelFor(session)}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
+                  {shown.map((b, i) => (
+                    <div key={i} style={{ fontSize: 12.5, lineHeight: 1.4 }}>
+                      <span style={{ fontWeight: 600, overflowWrap: "anywhere" }}>{b.exercise}</span>
+                      <span className="tabular" style={{ color: b.type === "time" ? "var(--time)" : "var(--text-muted)" }}>{"  "}{summarizeSets(b)}</span>
+                      {isOpen && b.notes && <div style={{ fontSize: 11.5, color: "var(--text-muted)", fontStyle: "italic" }}>{b.notes}</div>}
+                    </div>
+                  ))}
+                  {hidden > 0 && (
+                    <button onClick={() => setOpenPostId(isOpen ? null : session.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px 0", textAlign: "left", color: "var(--accent)", fontSize: 12, fontWeight: 600 }}>
+                      {isOpen ? "Show less" : `Show ${hidden} more exercise${hidden > 1 ? "s" : ""}`}
+                    </button>
+                  )}
+                </div>
+                {prs.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                    {prs.slice(0, 3).map((pr) => (
+                      <span key={pr.exercise} style={{ fontSize: 11, fontWeight: 700, background: "var(--accent-dim)", color: "var(--accent)", borderRadius: 999, padding: "3px 10px", overflowWrap: "anywhere" }}>
+                        New PR · {pr.exercise} {pr.weight}×{pr.value}
+                      </span>
+                    ))}
+                    {prs.length > 3 && <span style={{ fontSize: 11, color: "var(--text-muted)", alignSelf: "center" }}>+{prs.length - 3} more</span>}
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 14, fontSize: 11.5, color: "var(--text-muted)", paddingTop: 10, borderTop: "1px solid var(--border)" }}>
+                  <span><span className="tabular" style={{ color: "var(--text)", fontWeight: 700 }}>{totals.volume.toLocaleString()}</span> lb</span>
+                  <span><span className="tabular" style={{ color: "var(--text)", fontWeight: 700 }}>{totals.sets}</span> sets</span>
+                  <span><span className="tabular" style={{ color: "var(--text)", fontWeight: 700 }}>{blocks.length}</span> exercises</span>
+                </div>
+              </div>
+            );
+          })}
+          {feed.length > feedCount && (
+            <button onClick={() => setFeedCount((c) => c + FEED_PAGE)} style={{ ...homeChoiceButtonStyle, padding: "11px", textAlign: "center", fontSize: 13, fontWeight: 600 }}>
+              Load more ({feed.length - feedCount} older)
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Landing screen: just enough to get into a session (Continue) or into the
 // Split Builder for everything else (choosing, building, or editing a
 // split, and its schedule) — all of that used to live here directly, but
 // consolidating it into one dedicated screen kept this one from having to
 // juggle "pick a plan" and "log a workout" at once.
-function HomeScreen({ activePlan, onContinue, onManageSplit }) {
+function HomeScreen({ activePlan, profile, onContinue, onManageSplit, onOpenProfile }) {
   const header = (
     <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginBottom: 4 }}>
       <Dumbbell size={22} color="var(--accent)" />
@@ -740,9 +1124,17 @@ function HomeScreen({ activePlan, onContinue, onManageSplit }) {
   return (
     <div style={{ padding: "calc(24px + env(safe-area-inset-top)) 16px calc(60px + env(safe-area-inset-bottom))", maxWidth: 520, margin: "0 auto" }}>
       {header}
-      <div className="display" style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center", letterSpacing: "0.08em", marginBottom: 28 }}>
+      <div className="display" style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center", letterSpacing: "0.08em", marginBottom: 20 }}>
         {activePlan ? "Ready to Train" : "Let's Get Started"}
       </div>
+
+      <button onClick={onOpenProfile} style={{ ...homeChoiceButtonStyle, display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", marginBottom: 16 }}>
+        <Avatar profile={profile} size={40} />
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div className="display" style={{ fontSize: 15, overflowWrap: "anywhere" }}>{profile && profile.displayName ? profile.displayName : "Set up your profile"}</div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{profile && profile.displayName ? "View profile & stats" : "Add your name and photo"}</div>
+        </div>
+      </button>
 
       {activePlan ? (
         <button
@@ -1816,6 +2208,9 @@ export default function WorkoutTracker() {
   // set is what triggers the "bump the weight" nudge, for any reps exercise.
   // Set from the Split Builder hub; [min, max].
   const [repRangeSetting, setRepRangeSetting] = useState([8, 12]);
+  // Saved profile record (name, photo, bio, goal) — see `computeProfileStats`
+  // for the numbers on the profile page, which are derived from History.
+  const [profile, setProfile] = useState(null);
   // A live (non-backfilled) day's completed workout, kept for reference/editing
   // in the Log tab through the rest of that calendar week: { [dayKey]: { weekKey,
   // sessionId, draft, customDraft, addedDraft } }. Re-saving while weekKey still
@@ -1921,6 +2316,27 @@ export default function WorkoutTracker() {
     loadRepRange();
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadProfile() {
+      try {
+        const res = await storage.get("profile", false);
+        if (!cancelled && res && res.value) setProfile(JSON.parse(res.value));
+      } catch (e) {
+        // no profile yet
+      }
+    }
+    loadProfile();
+    return () => { cancelled = true; };
+  }, []);
+
+  function saveProfile(next) {
+    setProfile(next);
+    storage.set("profile", JSON.stringify(next), false).catch(() => {});
+  }
+
+  const profileStats = useMemo(() => computeProfileStats(history), [history]);
 
   function updateRepRange(index, value) {
     const n = value === "" ? "" : Number(value);
@@ -2878,7 +3294,21 @@ export default function WorkoutTracker() {
 
       <div style={{ position: "relative", zIndex: 1 }}>
       {screen === "home" && (
-        <HomeScreen activePlan={activePlan} onContinue={continueWithCurrentPlan} onManageSplit={() => setScreen("splitBuilder")} />
+        <HomeScreen activePlan={activePlan} profile={profile} onContinue={continueWithCurrentPlan} onManageSplit={() => setScreen("splitBuilder")} onOpenProfile={() => setScreen("profile")} />
+      )}
+
+      {screen === "profile" && (
+        <ProfileScreen
+          profile={profile}
+          stats={profileStats}
+          history={history}
+          dayLabelFor={(session) => {
+            const d = allDaysByKey[session.day];
+            return d ? (d.label !== d.tab ? `${d.tab} · ${d.label}` : d.tab) : session.day;
+          }}
+          onSave={saveProfile}
+          onBack={goToHome}
+        />
       )}
 
       {screen === "splitBuilder" && (

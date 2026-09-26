@@ -267,6 +267,56 @@ with no active plan yet, only the switching tools show. It also hosts the
 overarching rep-range setting (see "Data model" below) at the bottom,
 since that's a global preference, not scoped to any one plan.
 
+### Profile
+
+Reached from a chip at the top of Home (avatar + name, or "Set up your
+profile" until one exists) → `ProfileScreen` (`screen === "profile"`). First
+step toward a more social-feeling app, deliberately **local-only** for now:
+there's no backend, so nothing here is shared with anyone yet — the setup
+screen says so.
+
+Two separate pieces of data, on purpose:
+
+- **The saved record** — `profile` state in `WorkoutTracker`, persisted to
+  `localStorage` key `ironlog:profile`: `{ displayName, bio (≤160 chars),
+  goal (one of `PROFILE_GOALS`, or empty), photo, createdAt }`. Display name
+  is required to save. The photo is picked with a file input, then
+  `resizeImageToDataUrl` center-crops it square and downsizes to 256px JPEG
+  (~5–25KB) before storing it as a data URL — localStorage has a small quota,
+  so full-size camera photos would blow it. No photo falls back to initials
+  (or a dumbbell icon with no name) in `Avatar`, which Home also uses.
+- **The stats** — *never stored*. `computeProfileStats(history)` derives
+  them from History every time (`useMemo` on `history`): workouts, sets,
+  total volume (main sets + attached superset/drop-set weight×reps, same
+  rule as everywhere else), this-week count, current/longest **weekly**
+  streak, top 5 lifts, most-trained exercise, first-workout date. Deriving
+  instead of storing means editing or deleting a past workout — including
+  through the History editor — can't leave the profile out of date. Streak
+  = consecutive Monday-anchored weeks (`weekKeyFor`) with ≥1 workout; if
+  this week has none yet it counts from last week, so it doesn't look broken
+  until the week actually ends. Top lifts rank by heaviest weight (reps
+  break ties); bodyweight/timed sets have no weight so they're skipped.
+
+**The workout feed.** Below the stats, the profile page has a "Workouts"
+section — every saved session, newest first (same ordering rule as History),
+as post-style cards à la an X profile: avatar + name + date, the day's name,
+a condensed line per exercise (`summarizeSets`: `100×10, 105×8`, or `60s`
+for holds), and a volume/sets/exercises footer. A post previews its first 4
+exercises with "Show N more exercises" to expand the rest (and any notes);
+the feed renders 10 at a time with a "Load more (N older)" button, so a long
+history doesn't render hundreds of cards at once. It's **read-only** —
+editing or deleting a workout still happens in History; the feed is just a
+second, nicer view of the same `history` array (so it can't diverge).
+A card gets "New PR · Exercise 225×5" chips when a set beat the lifter's
+previous best *as of that date* (`computeSessionPRs` replays history
+oldest→newest, so a session keeps its badge even after you've gone heavier;
+a lift's first-ever log isn't a PR since there was nothing to beat; max 3
+chips shown, then "+N more").
+
+If real social features ever arrive (following, feeds, sharing), the record
+above is the natural thing to sync, and the derived stats are what others
+would see; both would need a backend and accounts first.
+
 ### Permanent per-day editing ("Plan Editor")
 
 `PlanEditorScreen`, reached from the Split Builder hub's "Edit Training
