@@ -93,7 +93,17 @@ arrays per slot — that variety is gone now in favor of one comprehensive,
 consistent list per slot everywhere. Only touch `MUSCLE_MAP` in `App.jsx`
 when adding a genuinely new exercise name to `SLOT_LIBRARY`; reusing an
 existing name (even across slots, e.g. `"Bulgarian Split Squat"` appearing
-in both `"Quads — Primary"` and `"Glutes"`) needs nothing extra.
+in both `"Quads"` and `"Glutes"`) needs nothing extra. Quads used to be
+three slots (`"Quads — Primary"`, `"Quads — Secondary"`, bare `"Quads"`)
+split by compound-vs-isolation emphasis, not by any real distinct region
+the way Chest/Back/Triceps/Biceps sub-slots are; that split lost its point
+once rep ranges stopped being compound/isolation-typed per exercise, so
+they're one `"Quads"` slot now (union of all three, de-duplicated). Every
+plan's leg days reference it — including both leg days in plans with two,
+which therefore offer the same quad pool rather than a heavy/light split.
+No migration: old History entries keep showing the old slot labels as
+saved, and any stale `lastUsedExercise`/`planDayOverrides` keys for the old
+names are just unused.
 A `"Rear Delts"` / `"Shoulders — Rear"` naming split that pre-dated this
 consolidation was merged into one `"Rear Delts"` slot name.
 
@@ -110,10 +120,39 @@ either the guided add flow (one session) or the Plan Editor (permanently,
 every week) rather than presumed. A handful of other well-established but
 previously-missing exercises were added to existing slots at the same
 time: `Meadows Row`/`Seal Row` (Back — Thickness), `JM Press`
-(Triceps — Long Head), `Egyptian Lateral Raise` (Shoulders — Side). This
-was a modest, spot-check pass, not the fuller exercise-database
-reorganization the user has flagged as a separate, later piece of work —
-scope intentionally kept small here.
+(Triceps — Long Head), `Egyptian Lateral Raise` (Shoulders — Side).
+
+A much larger, deliberately broad research pass followed (256 slot entries,
+~240 new exercise names; catalog went from ~185 to ~412 unique exercises
+across 31 slots). Sources: Wikipedia/Bodybuilding-Wizard/BarBend/Fitbod/
+StrengthLog exercise lists (ExRx blocks automated fetches with a 403), and
+manufacturer catalogs for the machine names — Hammer Strength/Life Fitness
+(plate-loaded and selectorized), Atlantis Strength, and gym80/Pure Kraft
+(Rogue, Technogym, Prime, Arsenal, and Cybex pages weren't fetchable).
+Machine names are kept brand-neutral ("Iso-Lateral Incline Press",
+"Pendulum Squat", "Belt Squat", "V-Squat", "Glute Kickback Machine",
+"Standing Leg Curl", "Total Hip Machine") since the user's gym won't
+match any one brand. Bodyweight coverage was called out explicitly: dips
+(parallel bar, ring, weighted, assisted machine), pull-up variants
+(weighted, archer, commando, L-sit, towel, muscle-up), push-up
+progressions (archer, ring, deficit, pseudo planche, one-arm, push-up
+plus), pistol/shrimp/skater squats, glute-ham raise, slider/stability-ball
+leg curls, Nordic and reverse Nordic curls, dragon flag, L-sit, and more.
+Four new slots were created for body parts that had no home:
+`"Back — Lower Back"` (hyperextensions, reverse hyper, lumbar machine),
+`"Shoulders — Rotator Cuff"`, `"Shoulders — Neck"` (needed a new `neck`
+muscle key → the `"neck"` slug in `MUSCLE_KEY_TO_SLUGS`), and `"Forearms"`
+(bucketed under Arms) — all mapped in `SLOT_TO_GENERIC_BODY_PART`.
+Additions to chest/triceps/biceps slots carry the right `detail`
+sub-region automatically (derived from the slot, per the rule above).
+Judgment calls: `Tibialis Raise`/`Machine Tibia Dorsi-Flexion` have no
+anatomical slug, so they light up calves as *secondary* only (closest
+approximation, same spirit as `sideDelt`'s mapping); serratus work has
+no slug either (Push-Up Plus is filed under Chest — Middle); kettlebell,
+band, and medicine-ball movements were skipped since the equipment enum
+has no matching value; Olympic/explosive lifts were skipped as out of
+scope for a hypertrophy tracker. The exercise-taxonomy reorganization the
+user flagged as a later piece of work is still separate from this.
 
 Traps used to be an afterthought — `"Barbell Shrug"`/`"DB Shrug"` sat
 bolted onto the deadlift/pullover slot (then named
