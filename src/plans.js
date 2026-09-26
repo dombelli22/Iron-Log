@@ -74,6 +74,8 @@ const SLOT_LIBRARY = {
     R("T-Bar Row", "Machine"),
     R("Machine Row", "Machine"),
     R("Inverted Row", "Bodyweight"),
+    R("Meadows Row", "Barbell"),
+    R("Seal Row", "Barbell"),
   ],
   "Back — Lower Lat": [
     R("Barbell Deadlift", "Barbell"),
@@ -109,6 +111,7 @@ const SLOT_LIBRARY = {
     R("Overhead Cable Extension", "Cable"),
     R("Overhead EZ-Bar Extension", "EZ-Bar"),
     R("Overhead Barbell Extension", "Barbell"),
+    R("JM Press", "Barbell"),
   ],
   "Triceps — Lateral Head": [
     R("Single-Arm Cable Pushdown", "Cable"),
@@ -152,6 +155,7 @@ const SLOT_LIBRARY = {
     R("DB Lateral Raise", "Dumbbell"),
     R("Machine Lateral Raise", "Machine"),
     R("Incline DB Lateral Raise", "Dumbbell"),
+    R("Egyptian Lateral Raise", "Cable"),
     R("Upright Row", "Barbell"),
   ],
   "Shoulders — Traps": [
@@ -240,6 +244,32 @@ const SLOT_LIBRARY = {
     R("Barbell Calf Raise", "Barbell"),
     R("Single-Leg DB Calf Raise", "Dumbbell"),
     T("Calf Raise Hold", "Bodyweight"),
+  ],
+  Abs: [
+    R("Cable Crunch", "Cable"),
+    R("Hanging Leg Raise", "Bodyweight"),
+    R("Hanging Knee Raise", "Bodyweight"),
+    R("Captain's Chair Leg Raise", "Machine"),
+    R("Machine Crunch", "Machine"),
+    R("Decline Sit-Up", "Bodyweight"),
+    R("Weighted Decline Sit-Up", "Dumbbell"),
+    R("Reverse Crunch", "Bodyweight"),
+    R("Ab Wheel Rollout", "Bodyweight"),
+    R("Toes-to-Bar", "Bodyweight"),
+    R("Sit-Up", "Bodyweight"),
+    T("Plank", "Bodyweight"),
+    T("Weighted Plank", "Dumbbell"),
+    T("Hollow Body Hold", "Bodyweight"),
+  ],
+  Obliques: [
+    R("Cable Woodchopper (High-to-Low)", "Cable"),
+    R("Cable Woodchopper (Low-to-High)", "Cable"),
+    R("Russian Twist", "Dumbbell"),
+    R("Hanging Oblique Raise", "Bodyweight"),
+    R("Standing Side Bend", "Dumbbell"),
+    R("Landmine Rotation", "Barbell"),
+    T("Side Plank", "Bodyweight"),
+    T("Weighted Side Plank", "Dumbbell"),
   ],
 };
 
@@ -580,8 +610,9 @@ const SLOT_TO_GENERIC_BODY_PART = {
   "Quads — Primary": "Legs", "Quads — Secondary": "Legs", Quads: "Legs",
   Hamstrings: "Legs", Glutes: "Legs", "Glute Medius / Abductors": "Legs",
   Adductors: "Legs", Calves: "Legs",
+  Abs: "Core", Obliques: "Core",
 };
-const GENERIC_BODY_PART_ORDER = ["Chest", "Back", "Shoulders", "Arms", "Legs"];
+const GENERIC_BODY_PART_ORDER = ["Chest", "Back", "Shoulders", "Arms", "Legs", "Core"];
 
 export const GENERIC_BODY_PARTS = (() => {
   const grouped = {};

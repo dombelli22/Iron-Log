@@ -96,6 +96,24 @@ appearing in both `"Quads — Primary"` and `"Glutes"`) needs nothing extra.
 A `"Rear Delts"` / `"Shoulders — Rear"` naming split that pre-dated this
 consolidation was merged into one `"Rear Delts"` slot name.
 
+Two new slots, `Abs` and `Obliques`, added core training to the database
+for the first time (14 and 8 exercises respectively — cable crunches,
+hanging leg raises, ab wheel rollouts, planks and their weighted/timed
+variants for Abs; woodchoppers, Russian twists, landmine rotations, side
+planks for Obliques) — sourced from current hypertrophy-training guidance,
+not just recalled from training data, the same as the earlier
+bodybuilder-quote research pass. Deliberately **not** added to any built-in
+plan's default days — every plan's day composition already reflects
+earlier, deliberate choices, and core work is easy to add yourself now via
+either the guided add flow (one session) or the Plan Editor (permanently,
+every week) rather than presumed. A handful of other well-established but
+previously-missing exercises were added to existing slots at the same
+time: `Meadows Row`/`Seal Row` (Back — Thickness), `JM Press`
+(Triceps — Long Head), `Egyptian Lateral Raise` (Shoulders — Side). This
+was a modest, spot-check pass, not the fuller exercise-database
+reorganization the user has flagged as a separate, later piece of work —
+scope intentionally kept small here.
+
 Traps used to be an afterthought — `"Barbell Shrug"`/`"DB Shrug"` sat
 bolted onto the deadlift/pullover slot (then named
 `"Back — Lower Lat / Traps"`), and `"Upright Row"` in `"Shoulders — Side"`
@@ -167,7 +185,7 @@ applied silently.
   editor for the active plan anytime, pre-filled with its *current* schedule
   (not the default) — this is how assignments get changed later.
 - Persists to `localStorage` key `ironlog:plan-schedules`, shape
-  `{ [planId]: schedule }` — scoped per plan like `removedFromSlots`.
+  `{ [planId]: schedule }` — scoped per plan like `planDayOverrides` (below).
 - The day-tab bar is driven by the schedule, not by `Object.keys(plan.days)`:
   it iterates real weekdays (`WEEKDAYS`, Monday→Sunday) that have a
   non-null assignment, showing the weekday abbreviation as the tab and the
@@ -176,13 +194,43 @@ applied silently.
   Thursday. The same plan-day can be assigned to more than one weekday (e.g.
   repeating a session); `day` state still stores the plan's day key, not the
   weekday, so history entries are unaffected by later schedule edits.
-- `removedFromSlots` (see below) is scoped per-plan so removing an exercise
-  from a slot in one plan doesn't affect a same-named slot in another plan.
-  Picking a **new** plan from Home also resets the in-progress `draft`/
-  `customDraft`/`addedDraft` state, so nothing bleeds across plans — the
-  known cross-day collision below is still just a same-plan issue.
+- Picking a **new** plan from Home resets the in-progress `draft`/
+  `customDraft`/`addedDraft`/`hiddenSlots` state, so nothing bleeds across
+  plans.
 - History stays global across plans (a lifting log is more useful unified
   than split up), just labeled per-entry via `ALL_DAYS_BY_KEY`.
+
+### Permanent per-day editing ("Plan Editor")
+
+The pencil icon in the app header (`openPlanEditor`, next to the schedule's
+calendar icon) opens `PlanEditorScreen` — add or permanently remove a whole
+body-part slot from one of the active plan's days, recurring every week
+until changed again here. This is deliberately a *third*, separate
+mechanism alongside two things it's easy to confuse it with:
+
+- The guided "Existing within database" add flow (`addedDraft`) is a
+  one-off addition for **today's session only** — gone again once that
+  day's live draft resets for a new week (see "A live day's workout stays
+  visible for the week" below).
+- The Log tab's per-slot trash icon (`hiddenSlots`, "Data model" below) is
+  the opposite of Plan Editor's remove: a **one-week-only skip** of one of
+  the day's built-in slots, not a permanent plan edit.
+
+Persists to `localStorage` key `ironlog:plan-day-overrides`, shape
+`{ [planId]: { [dayKey]: { added: [slotName, ...], removed: [slotName, ...] } } }`.
+`workoutData` (`WorkoutTracker`) is a `useMemo` that layers this on top of
+`activePlan.days` every render: a day with no override behaves exactly as
+authored; otherwise `removed` slot names are filtered out of the day's base
+`slots` and `added` slot names are appended (built fresh from
+`GLOBAL_SLOT_LIBRARY`, so a plan-editor-added slot always reflects the
+current, full exercise list for that slot name). `togglePermanentSlot`
+figures out which of `added`/`removed` a given slot name belongs to from
+the plan's own *base* `days` (not from the current effective list), so
+toggling a base slot off and back on cleanly clears it from `removed`
+again rather than accumulating in `added`, and vice versa for a slot that
+only exists because it was added here. Works identically for built-in
+`PLAN_LIBRARY` plans and user-built custom plans — same override shape,
+keyed by whatever plan id/day key each already has.
 
 ### Guided plan picker ("Help Me Choose")
 
@@ -351,15 +399,30 @@ only whatever the active plan's own days happened to use (derived via
 the slot name on " — " (so e.g. "Front Delts" and "Rear Delts", having no
 dash, each became their own top-level part instead of grouping under
 "Shoulders"). `GENERIC_BODY_PARTS` (`plans.js`) fixes both: an explicit
-`SLOT_TO_GENERIC_BODY_PART` map buckets all ~27 slots into five broad parts
-(Chest, Back, Shoulders, Arms, Legs, in that fixed order) with a
+`SLOT_TO_GENERIC_BODY_PART` map buckets all slots into six broad parts
+(Chest, Back, Shoulders, Arms, Legs, Core, in that fixed order) with a
 prefix-based fallback for any slot the map doesn't yet cover, so a future
 slot never silently disappears from the picker just because this map
-wasn't updated for it.
+wasn't updated for it. Core (`Abs`, `Obliques` — added along with the rest
+of the exercises below) is the newest bucket and a useful example of that
+fallback design: it only needed two lines added to
+`SLOT_TO_GENERIC_BODY_PART`/`GENERIC_BODY_PART_ORDER`, nothing else, to
+show up correctly in the picker.
 
 ## Logging model (per day, in component state)
 
-- `draft`: fixed-slot entries, keyed by slot name — `{ exercise, notes, attachment, sets }`
+- `draft`: fixed-slot entries, scoped per day and then by slot name —
+  `{ [day]: { [slotName]: { exercise, notes, attachment, sets } } }`. This
+  used to be a flat `{ [slotName]: ... }` with no day scoping at all, which
+  was a real bug, not just a same-named-slot edge case: `sessionBlocks`
+  read the *entire* `draft` object with no filter by the current day, so
+  switching days mid-session without saving could carry a previous day's
+  entries — even for slot names that don't exist on the new day — silently
+  into whatever got saved next. Every reader/writer (`slotDraftOf`,
+  `setExercise`, `setNotes`, `setAttachment`, `updateRow`/`addRow`/
+  `removeRow`, `addExtra`/`updateExtra`/`removeExtra`, `sessionBlocks`, the
+  `weekDrafts` hydration effect, `saveWorkout`, `discardSession`,
+  `deleteSession`) now reads/writes `draft[day]`, never the bare object.
 - `customDraft[day]`: manually-added exercises (free-typed name, manual
   weight/reps, no dropdowns, no attachment — equip isn't tracked for these
   so there's no way to know if a cable attachment picker even applies) —
@@ -367,7 +430,34 @@ wasn't updated for it.
 - `addedDraft[day]`: exercises pulled from the plan library via the guided
   flow — structured like a normal slot (dropdowns, diagram, attachment
   picker, etc.) but not one of the day's default slots —
-  `{ id, slotName, exercise, notes, attachment, sets }`
+  `{ id, slotName, exercise, notes, attachment, sets }`. Renders **inline**
+  in the Log tab, directly below the day's fixed slots (in the order
+  added) — there used to be a separate "Added From Plan" section header
+  segregating these from the rest of the day, which read as if they were
+  an afterthought rather than just more of the session; removed in favor of
+  one continuous list. Only genuinely manual/typed exercises (`customDraft`)
+  still get their own "Custom" section at the bottom, since those aren't
+  tied to any slot in the library at all.
+- `hiddenSlots[day]`: fixed-slot names hidden from the current week's
+  session for that day — `toggleSlotHidden` (Log tab's per-slot trash icon,
+  moved to the slot's collapsed header rather than buried behind the
+  exercise dropdown) adds/removes a slot name from this list. Not a plan
+  edit: it rides along in the same `weekDrafts` record as `draft`/
+  `customDraft`/`addedDraft` (see below) and resets to empty — the full
+  plan showing again — whenever the week rolls over, same as everything
+  else there. A small "Restore {slot}" chip appears for anything currently
+  hidden, in case it was hidden by mistake. Ignored entirely while
+  backfilling (`backfill` truthy): a past session's fixed slots always show
+  in full, since "hidden this week" isn't a meaningful concept for a
+  different, already-elapsed week, and an unfilled slot already doesn't get
+  saved regardless. This replaced an earlier permanent, plan-scoped
+  `removedFromSlots` mechanism that pruned one exercise *option* out of a
+  slot's dropdown forever — surprising in practice, since the trash icon
+  read as "get rid of this for today" but actually mutated the plan's
+  library permanently. That capability is gone; a slot's whole line can now
+  only be removed permanently via the Plan Editor (previous section) or
+  skipped for the current week via `hiddenSlots` — nothing prunes one
+  specific exercise choice out of a slot's dropdown anymore.
 - Every `sets` entry is `{ weight, value, extra }` — `extra` is an optional
   attached superset/drop-set: `{ type: "superset"|"dropset", exercise, weight, value }`.
   `weight` is always a manual number entry; `value` (reps) is a 1–20 dropdown,
@@ -384,24 +474,21 @@ wasn't updated for it.
 - `notes` is **one shared field per exercise**, not per set — deliberate,
   the user wanted form-cue notes that apply across all sets of that exercise
 - `attachment` is the same idea, cable-only: a dropdown (`CABLE_ATTACHMENTS`
-  in `App.jsx` — Straight Bar, Rope, V-Bar, D-Handles, Lat Pulldown Bar,
-  Seated Row Bar, Multi-Grip Camber Bar, Ankle Strap, Ab/Crunch Strap, etc.)
-  shown only when the selected exercise's `equip === "Cable"`, one shared
-  value per exercise like notes rather than per set (you don't swap
-  attachments mid-set)
+  in `App.jsx` — Straight Bar, EZ-Curl Bar, Rope, V-Bar, D-Handles, Lat
+  Pulldown Bar, Seated Row Bar, Multi-Grip Camber Bar, Mag Grip (Wide/Mid/
+  Narrow), Straps, Ankle Strap, Ab/Crunch Strap) shown only when the
+  selected exercise's `equip === "Cable"`, one shared value per exercise
+  like notes rather than per set (you don't swap attachments mid-set)
 - On save, all three drafts get flattened into `sessionBlocks` and appended
   to history (`localStorage` key `ironlog:workout-history`, JSON array of
   `{ id, date, day, blocks }`); each `block` is
   `{ slot, exercise, type, notes, attachment, sets }` (`attachment` is `""`
-  for non-cable/custom exercises, and History only renders it when present)
-
-`removedFromSlots` (`localStorage` key `ironlog:workout-removed-exercises`):
-lets the user permanently delete an exercise option from a slot's library
-(persisted, not per-session). A slot is never allowed to reach zero options.
-Shape is `{ [planId]: { [slotName]: [exerciseName, ...] } }`, nested by plan
-since the same slot name can exist in more than one plan. Data saved before
-multi-plan support existed was a flat `{ [slotName]: [...] }`; it's migrated
-on load by treating it as belonging to the `original` plan id.
+  for non-cable/custom exercises, and History only renders it when present).
+  A session's total volume (both the live Log tab's running total and
+  History's per-session header) sums each block's main sets *plus* any
+  attached superset/drop-set weight×reps — History's total used to only sum
+  the main sets, under-reporting volume for any session with an attached
+  extra; both totals now use the same calculation.
 
 "Last time" lookup: scans history most-recent-first for the last block
 matching an exercise name, and returns its **single best set** — highest
@@ -443,6 +530,35 @@ This matters once backfilling exists (below): a backfilled older-dated
 session is *appended* to the array on save, so insertion order alone would
 put it at the top of the list even though it happened before everything
 else.
+
+### Editing a past History entry
+
+Full detail also offers an "Edit" button (next to "Show Summary") that
+turns that session's blocks into an editable form — exercise name as free
+text, weight/rep (or seconds, for a timed block) inputs per set, notes,
+attachment, add/remove a set, add/remove a whole exercise block, and
+editing/removing an attached superset/drop-set. This operates directly on
+`historyEditDraft`, a working copy of the session's raw `blocks` array —
+deliberately **not** routed through the plan/slot machinery (`draft`,
+`getSlot`, etc.), since a past session's exercises don't need to still
+match any current slot's dropdown options (the plan may have changed
+since, or the entry may not belong to any of the active plan's days at
+all, e.g. a "Custom Workout" backfill). "Save Changes" re-runs the same
+"only count a set once it has both fields filled" filter `saveWorkout`
+uses (`cleanedHistoryEdit`, a `useMemo`) and overwrites that entry's
+`blocks` in place — same `id`, so it doesn't create a duplicate or move in
+the sort order. Save is disabled when that filter would leave zero blocks,
+rather than silently no-op-ing.
+
+The Edit button only appears for a session that **isn't** the day
+currently linked to a live current-week draft (`liveLinkedHistoryIds`,
+matched against `weekDrafts`) — that one is already editable right in the
+Log tab, with saves updating this same entry (see "A live day's workout
+stays visible for the week" below). Editing it a second way, through
+History, would need to somehow reconcile back into `draft`/`customDraft`/
+`addedDraft` shape to stay in sync, which isn't attempted; instead History
+editing is scoped to exactly what it was asked for — genuinely past weeks
+— and the current week keeps using its one existing editing path.
 
 ### Adding a past workout (backfill)
 
@@ -691,22 +807,11 @@ equipment photo doesn't.
 
 ## Known issues / things not yet fixed
 
-- **Cross-day slot collision**: `draft` is keyed by slot name only, not by
-  `day + slot name`. Slot names repeat across days (e.g. `"Chest — Upper"` on
-  both Monday and Friday), so in-progress (unsaved) entries for a shared slot
-  name can bleed between days if you switch days mid-session without saving.
-  Not yet fixed — lower priority since normal usage is one day per session.
 - No automated tests exist.
 - `Preacher Curl` is on the standard barbell range, not EZ-Bar, even though
   it's commonly done with an EZ bar in practice — only exercises with
   "EZ-Bar" literally in the name got the EZ-Bar weight range. Intentional
   simplification, flagged to the user, never revisited.
-- Plan customization is currently limited to what the existing add/remove
-  exercise flow already allowed (swap which exercises populate a slot).
-  There's no UI yet to build a plan from scratch — choosing your own days,
-  slots, and muscle groups — or to reorder/rename days within a plan. Scoped
-  out of the initial Home/multi-plan pass deliberately, flagged to the user
-  as a natural next iteration rather than silently left out.
 
 ## Preferences expressed during development (worth keeping in mind)
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { Dumbbell, Plus, Trash2, ChevronDown, Save, X, Loader2, History as HistoryIcon, RotateCcw, Timer, TrendingUp, Layers, Home as HomeIcon, Calendar as CalendarIcon } from "lucide-react";
+import { Dumbbell, Plus, Trash2, ChevronDown, Save, X, Loader2, History as HistoryIcon, RotateCcw, Timer, TrendingUp, Layers, Home as HomeIcon, Calendar as CalendarIcon, Pencil } from "lucide-react";
 import { storage } from "./storage";
 import { PLAN_LIBRARY, ALL_DAYS_BY_KEY, WEEKDAYS, getScheduledDay, GLOBAL_SLOT_LIBRARY, GLOBAL_SLOT_NAMES, GLOBAL_EXERCISE_LIST, GENERIC_BODY_PARTS } from "./plans";
 import BodyModel from "react-body-highlighter";
@@ -167,6 +167,7 @@ const MUSCLE_MAP = {
   "Overhead Cable Extension": { primary: ["triceps"], secondary: [], detail: { muscle: "triceps", region: "long" } },
   "Overhead EZ-Bar Extension": { primary: ["triceps"], secondary: [], detail: { muscle: "triceps", region: "long" } },
   "Overhead Barbell Extension": { primary: ["triceps"], secondary: [], detail: { muscle: "triceps", region: "long" } },
+  "JM Press": { primary: ["triceps"], secondary: ["chest"], detail: { muscle: "triceps", region: "long" } },
   "Single-Arm Cable Pushdown": { primary: ["triceps"], secondary: [], detail: { muscle: "triceps", region: "lateral" } },
   "Rope or Bar Pushdown": { primary: ["triceps"], secondary: [], detail: { muscle: "triceps", region: "lateral" } },
   "V-Bar Pushdown": { primary: ["triceps"], secondary: [], detail: { muscle: "triceps", region: "lateral" } },
@@ -201,6 +202,8 @@ const MUSCLE_MAP = {
   "T-Bar Row": { primary: ["midBack"], secondary: ["lats", "biceps", "rearDelt"] },
   "Machine Row": { primary: ["midBack"], secondary: ["lats", "biceps"] },
   "Inverted Row": { primary: ["midBack"], secondary: ["lats", "biceps", "rearDelt"] },
+  "Meadows Row": { primary: ["midBack"], secondary: ["lats", "biceps", "rearDelt"] },
+  "Seal Row": { primary: ["midBack"], secondary: ["lats", "biceps"] },
 
   "Barbell Deadlift": { primary: ["lowerBack"], secondary: ["hamstrings", "glutes", "traps", "lats"] },
   "Rack Pull": { primary: ["lowerBack"], secondary: ["hamstrings", "glutes", "traps", "lats"] },
@@ -246,6 +249,7 @@ const MUSCLE_MAP = {
   "DB Lateral Raise": { primary: ["sideDelt"], secondary: [] },
   "Machine Lateral Raise": { primary: ["sideDelt"], secondary: [] },
   "Incline DB Lateral Raise": { primary: ["sideDelt"], secondary: [] },
+  "Egyptian Lateral Raise": { primary: ["sideDelt"], secondary: [] },
   "Upright Row": { primary: ["sideDelt"], secondary: ["traps", "biceps"] },
 
   "Barbell Shrug": { primary: ["traps"], secondary: [] },
@@ -295,6 +299,30 @@ const MUSCLE_MAP = {
   "Side-Lying Hip Abduction Hold": { primary: ["abductors"], secondary: [] },
   "Copenhagen Plank Hold": { primary: ["adductors"], secondary: ["abs"] },
   "Calf Raise Hold": { primary: ["calves"], secondary: [] },
+
+  "Cable Crunch": { primary: ["abs"], secondary: [] },
+  "Hanging Leg Raise": { primary: ["abs"], secondary: [] },
+  "Hanging Knee Raise": { primary: ["abs"], secondary: [] },
+  "Captain's Chair Leg Raise": { primary: ["abs"], secondary: [] },
+  "Machine Crunch": { primary: ["abs"], secondary: [] },
+  "Decline Sit-Up": { primary: ["abs"], secondary: [] },
+  "Weighted Decline Sit-Up": { primary: ["abs"], secondary: [] },
+  "Reverse Crunch": { primary: ["abs"], secondary: [] },
+  "Ab Wheel Rollout": { primary: ["abs"], secondary: ["obliques"] },
+  "Toes-to-Bar": { primary: ["abs"], secondary: [] },
+  "Sit-Up": { primary: ["abs"], secondary: [] },
+  "Plank": { primary: ["abs"], secondary: ["obliques"] },
+  "Weighted Plank": { primary: ["abs"], secondary: ["obliques"] },
+  "Hollow Body Hold": { primary: ["abs"], secondary: [] },
+
+  "Cable Woodchopper (High-to-Low)": { primary: ["obliques"], secondary: ["abs"] },
+  "Cable Woodchopper (Low-to-High)": { primary: ["obliques"], secondary: ["abs"] },
+  "Russian Twist": { primary: ["obliques"], secondary: ["abs"] },
+  "Hanging Oblique Raise": { primary: ["obliques"], secondary: ["abs"] },
+  "Standing Side Bend": { primary: ["obliques"], secondary: [] },
+  "Landmine Rotation": { primary: ["obliques"], secondary: ["abs"] },
+  "Side Plank": { primary: ["obliques"], secondary: ["abs"] },
+  "Weighted Side Plank": { primary: ["obliques"], secondary: ["abs"] },
 };
 
 // ---------------------------------------------------------------------------
@@ -310,7 +338,7 @@ const REP_RANGE_TYPE = {
   "Pec Deck Fly": "isolation", "Push-Up": "compound",
   "Decline DB Fly": "isolation", "Decline Cable Fly": "isolation", "Decline DB Press": "compound", "Decline Barbell Press": "compound",
   "Machine Chest Press": "compound", "Machine Decline Press": "compound", "Chest Dip": "compound", "Incline Push-Up": "compound",
-  "Overhead DB Extension": "isolation", "Overhead Cable Extension": "isolation", "Overhead EZ-Bar Extension": "isolation", "Overhead Barbell Extension": "isolation",
+  "Overhead DB Extension": "isolation", "Overhead Cable Extension": "isolation", "Overhead EZ-Bar Extension": "isolation", "Overhead Barbell Extension": "isolation", "JM Press": "isolation",
   "Single-Arm Cable Pushdown": "isolation", "Rope or Bar Pushdown": "isolation", "V-Bar Pushdown": "isolation",
   "Machine Triceps Extension": "isolation", "Bench Dip": "isolation",
   "Close-Grip Barbell Bench Press": "compound", "Close-Grip DB Bench Press": "compound",
@@ -321,7 +349,7 @@ const REP_RANGE_TYPE = {
   "Single-Arm Lat Pulldown": "compound", "Pull-Up": "compound", "Chin-Up": "compound", "Neutral-Grip Pull-Up": "compound",
   "Barbell Row": "compound", "Pendlay Row": "compound", "DB Row": "compound", "Seated Cable Row": "compound", "Single-Arm Cable Row": "compound",
   "Chest-Supported DB Row": "compound", "Chest-Supported Barbell/T-Bar Row": "compound",
-  "T-Bar Row": "compound", "Machine Row": "compound", "Inverted Row": "compound",
+  "T-Bar Row": "compound", "Machine Row": "compound", "Inverted Row": "compound", "Meadows Row": "compound", "Seal Row": "compound",
   "Barbell Deadlift": "compound", "Rack Pull": "compound", "DB Deadlift": "compound", "Straight-Arm Pulldown": "isolation",
   "Cable Pullover": "isolation", "DB Pullover": "isolation",
   "Bayesian Curl": "isolation", "Incline DB Curl": "isolation", "Standing Barbell Curl": "isolation", "Cross-Body Cable Curl": "isolation",
@@ -334,7 +362,7 @@ const REP_RANGE_TYPE = {
   "Seated DB Overhead Press": "compound", "Seated Barbell Overhead Press": "compound", "Standing Barbell Overhead Press": "compound",
   "Cable Overhead Press": "compound", "Machine Shoulder Press": "compound", "Arnold Press": "compound",
   "Cable Lateral Raise": "isolation", "DB Lateral Raise": "isolation", "Machine Lateral Raise": "isolation",
-  "Incline DB Lateral Raise": "isolation", "Upright Row": "isolation",
+  "Incline DB Lateral Raise": "isolation", "Egyptian Lateral Raise": "isolation", "Upright Row": "isolation",
   "Barbell Shrug": "isolation", "DB Shrug": "isolation", "Trap Bar Shrug": "isolation", "Smith Machine Shrug": "isolation",
   "Cable Shrug": "isolation", "Behind-the-Back Barbell Shrug": "isolation", "Snatch-Grip Shrug": "isolation",
   "Cable Upright Row": "isolation", "DB Upright Row": "isolation", "Y-Raise": "isolation",
@@ -347,6 +375,15 @@ const REP_RANGE_TYPE = {
   "Standing Calf Raise": "isolation", "Single-Leg DB Calf Raise": "isolation", "Barbell Calf Raise": "isolation",
   "Seated Calf Raise": "isolation", "Leg Press Calf Raise": "isolation",
   "Leg Extension Machine": "isolation", "Leg Curl Machine": "isolation", "Hip Abductor Machine": "isolation", "Hip Adductor Machine": "isolation",
+  "Cable Crunch": "isolation", "Hanging Leg Raise": "isolation", "Hanging Knee Raise": "isolation", "Captain's Chair Leg Raise": "isolation",
+  "Machine Crunch": "isolation", "Decline Sit-Up": "isolation", "Weighted Decline Sit-Up": "isolation", "Reverse Crunch": "isolation",
+  "Ab Wheel Rollout": "isolation", "Toes-to-Bar": "isolation", "Sit-Up": "isolation",
+  "Cable Woodchopper (High-to-Low)": "isolation", "Cable Woodchopper (Low-to-High)": "isolation", "Russian Twist": "isolation",
+  "Hanging Oblique Raise": "isolation", "Standing Side Bend": "isolation", "Landmine Rotation": "isolation",
+  // Plank, Weighted Plank, Hollow Body Hold, Side Plank, and Weighted Side
+  // Plank are timed T() exercises — excluded here the same way Farmer's
+  // Carry and the other holds are, since the rep-range nudge only applies
+  // to rep-counted sets.
 };
 function getRepRange(exerciseName) {
   const t = REP_RANGE_TYPE[exerciseName];
@@ -907,6 +944,10 @@ const CABLE_ATTACHMENTS = [
   "Lat Pulldown Bar (Wide)",
   "Seated Row Bar",
   "Multi-Grip Camber Bar",
+  "Mag Grip (Wide)",
+  "Mag Grip (Mid)",
+  "Mag Grip (Narrow)",
+  "Straps",
   "Ankle Strap",
   "Ab/Crunch Strap",
 ];
@@ -1284,6 +1325,104 @@ function BuildPlanScreen({ existingPlans, onSave, onCancel }) {
   return null;
 }
 
+// Permanent, recurring per-day slot editor — add or remove a whole
+// body-part line from one of the active plan's days so it repeats every
+// week. Kept separate from the in-session guided add flow (a one-off
+// addition for today) and from the log screen's per-slot trash icon (a
+// one-week-only skip): changes made here persist across weeks until
+// changed again, the same way the plan's own built-in days do.
+function PlanEditorScreen({ plan, effectiveDays, onToggleSlot, onBack }) {
+  const [openDay, setOpenDay] = useState(null);
+  const [addFlow, setAddFlow] = useState(null); // { dayKey, step: "bodyPart" | "slot", bodyPart }
+
+  const dayKeys = Object.keys(plan.days);
+
+  return (
+    <div style={{ padding: "20px 20px 40px" }}>
+      <button onClick={onBack} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 13, cursor: "pointer", padding: 0, marginBottom: 14 }}>‹ Back</button>
+      <div className="display" style={{ fontSize: 20, marginBottom: 4 }}>EDIT PLAN DAYS</div>
+      <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 20, lineHeight: 1.5 }}>
+        Permanently add or remove a body-part slot from a day — it repeats every week until you change it again here. For a one-off skip just for this week, use the trash icon on a slot while logging instead.
+      </div>
+
+      {dayKeys.map((dayKey) => {
+        const day = plan.days[dayKey];
+        const effectiveSlots = effectiveDays?.[dayKey]?.slots || day.slots;
+        const isOpen = openDay === dayKey;
+        const flowHere = addFlow && addFlow.dayKey === dayKey ? addFlow : null;
+        return (
+          <div key={dayKey} style={{ marginBottom: 10, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
+            <button onClick={() => { setOpenDay(isOpen ? null : dayKey); setAddFlow(null); }} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 14px", background: "transparent", border: "none", cursor: "pointer", color: "var(--text)" }}>
+              <div style={{ textAlign: "left" }}>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>{day.tab}</div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{day.subtitle}</div>
+              </div>
+              <ChevronDown size={16} color="var(--text-muted)" style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+            </button>
+            {isOpen && (
+              <div style={{ padding: "0 14px 14px" }}>
+                {effectiveSlots.map((slot) => (
+                  <div key={slot.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 10px", marginBottom: 6, borderRadius: 8, background: "var(--surface-2)" }}>
+                    <span style={{ fontSize: 13 }}>{slot.name}</span>
+                    <button onClick={() => onToggleSlot(dayKey, slot.name)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+                      <Trash2 size={14} color="var(--text-muted)" />
+                    </button>
+                  </div>
+                ))}
+                {effectiveSlots.length === 0 && (
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", padding: "8px 0 8px" }}>No slots — this day is a rest day until you add one.</div>
+                )}
+
+                {!flowHere && (
+                  <button onClick={() => setAddFlow({ dayKey, step: "bodyPart" })} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px", marginTop: 4, borderRadius: 8, background: "transparent", border: "1px dashed var(--accent)", cursor: "pointer", color: "var(--accent)", fontSize: 12.5, fontWeight: 700 }}>
+                    <Plus size={14} /> Add Body Part
+                  </button>
+                )}
+
+                {flowHere && flowHere.step === "bodyPart" && (
+                  <div style={{ marginTop: 4 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                      <span style={{ fontSize: 10.5, color: "var(--text-muted)", letterSpacing: "0.06em" }}>WHICH BODY PART?</span>
+                      <button onClick={() => setAddFlow(null)} style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}><X size={14} color="var(--text-muted)" /></button>
+                    </div>
+                    {Object.keys(GENERIC_BODY_PARTS).map((part) => (
+                      <button key={part} onClick={() => setAddFlow({ dayKey, step: "slot", bodyPart: part })} style={{ width: "100%", textAlign: "left", padding: "10px 12px", marginBottom: 6, borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", cursor: "pointer", color: "var(--text)", fontSize: 13 }}>
+                        {part}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {flowHere && flowHere.step === "slot" && (
+                  <div style={{ marginTop: 4 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                      <button onClick={() => setAddFlow({ dayKey, step: "bodyPart" })} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 11, cursor: "pointer", padding: 0 }}>‹ Back</button>
+                      <button onClick={() => setAddFlow(null)} style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}><X size={14} color="var(--text-muted)" /></button>
+                    </div>
+                    {(GENERIC_BODY_PARTS[flowHere.bodyPart] || []).map((slotName) => {
+                      const already = effectiveSlots.some((s) => s.name === slotName);
+                      return (
+                        <button
+                          key={slotName}
+                          onClick={() => { if (!already) { onToggleSlot(dayKey, slotName); setAddFlow(null); } }}
+                          disabled={already}
+                          style={{ width: "100%", textAlign: "left", padding: "10px 12px", marginBottom: 6, borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", cursor: already ? "default" : "pointer", color: already ? "var(--text-muted)" : "var(--text)", fontSize: 13, opacity: already ? 0.5 : 1 }}
+                        >
+                          {slotName}{already ? " — already on this day" : ""}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function WorkoutTracker() {
   // Always land on Home first; it decides whether to jump back into a
   // previously-chosen plan or ask you to pick one.
@@ -1299,8 +1438,10 @@ export default function WorkoutTracker() {
   const [openSlot, setOpenSlot] = useState(null);
   const [openHistoryId, setOpenHistoryId] = useState(null); // history session id expanded to the summary view
   const [fullHistoryId, setFullHistoryId] = useState(null); // history session id expanded further, to the full per-set view
+  const [editingHistoryId, setEditingHistoryId] = useState(null); // history session id currently being edited in place
+  const [historyEditDraft, setHistoryEditDraft] = useState(null); // working copy of that session's blocks while editing
   const [backfill, setBackfill] = useState(null); // null | { date: "YYYY-MM-DD", dayKey: string | "__custom__" } — set while logging a past workout
-  const [draft, setDraft] = useState({}); // { [slotName]: { exercise, notes, sets: [{weight, value}] } }
+  const [draft, setDraft] = useState({}); // { [day]: { [slotName]: { exercise, notes, sets: [{weight, value}] } } } — scoped per day so same-named slots on different days never bleed into each other
   const [history, setHistory] = useState([]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [storageError, setStorageError] = useState(null);
@@ -1308,13 +1449,21 @@ export default function WorkoutTracker() {
   const [savedFlash, setSavedFlash] = useState(false);
   const [customDraft, setCustomDraft] = useState({}); // { [day]: [{ id, exercise, notes, sets }] }
   const [openCustomId, setOpenCustomId] = useState(null);
-  const [removedFromSlots, setRemovedFromSlots] = useState({}); // { [planId]: { [slotName]: [exerciseName, ...] } }
-  const [removedLoaded, setRemovedLoaded] = useState(false);
+  // Fixed plan slots hidden from this week's session for a given day —
+  // "delete the line" for a day's default slot, without permanently
+  // altering the plan. Reset to empty (the full plan shows again) whenever
+  // weekDrafts rolls over to a new week, same as draft/customDraft/addedDraft.
+  const [hiddenSlots, setHiddenSlots] = useState({}); // { [day]: [slotName, ...] }
   const [addedDraft, setAddedDraft] = useState({}); // { [day]: [{ id, slotName, exercise, notes, sets }] }
   const [openAddedId, setOpenAddedId] = useState(null);
   const [addFlow, setAddFlow] = useState(null); // null | { step, bodyPart, slotName }
   const [customPlans, setCustomPlans] = useState([]); // user-built plans, same shape as PLAN_LIBRARY entries
   const [customPlansLoaded, setCustomPlansLoaded] = useState(false);
+  // Permanent, recurring per-day slot changes made from the Plan Editor —
+  // layered on top of a plan's own `days` every week, unlike `hiddenSlots`
+  // (this week only). { [planId]: { [dayKey]: { added: [slotName,...], removed: [slotName,...] } } }
+  const [planDayOverrides, setPlanDayOverrides] = useState({});
+  const [planDayOverridesLoaded, setPlanDayOverridesLoaded] = useState(false);
   // A live (non-backfilled) day's completed workout, kept for reference/editing
   // in the Log tab through the rest of that calendar week: { [dayKey]: { weekKey,
   // sessionId, draft, customDraft, addedDraft } }. Re-saving while weekKey still
@@ -1377,23 +1526,17 @@ export default function WorkoutTracker() {
 
   useEffect(() => {
     let cancelled = false;
-    async function loadRemoved() {
+    async function loadPlanDayOverrides() {
       try {
-        const res = await storage.get("workout-removed-exercises", false);
-        if (!cancelled && res && res.value) {
-          const parsed = JSON.parse(res.value);
-          // Migrate the old flat { slotName: [...] } shape (from before plans
-          // existed) by treating it as belonging to the original plan.
-          const isOldFlatShape = Object.values(parsed).some((v) => Array.isArray(v));
-          setRemovedFromSlots(isOldFlatShape ? { original: parsed } : parsed);
-        }
+        const res = await storage.get("plan-day-overrides", false);
+        if (!cancelled && res && res.value) setPlanDayOverrides(JSON.parse(res.value));
       } catch (e) {
-        // none removed yet
+        // no permanent day edits yet
       } finally {
-        if (!cancelled) setRemovedLoaded(true);
+        if (!cancelled) setPlanDayOverridesLoaded(true);
       }
     }
-    loadRemoved();
+    loadPlanDayOverrides();
     return () => { cancelled = true; };
   }, []);
 
@@ -1444,7 +1587,31 @@ export default function WorkoutTracker() {
     return merged;
   }, [customPlans]);
   const activePlan = allPlans.find((p) => p.id === selectedPlanId) || null;
-  const workoutData = activePlan ? activePlan.days : null;
+
+  // Layers this plan's permanent Plan Editor overrides (recurring every
+  // week, unlike `hiddenSlots`) on top of its own `days` — added slots are
+  // appended (built from the global catalog), removed slots are filtered
+  // out. Plans/days with no override behave exactly as authored.
+  const workoutData = useMemo(() => {
+    if (!activePlan) return null;
+    const overrides = planDayOverrides[activePlan.id];
+    if (!overrides) return activePlan.days;
+    const next = {};
+    Object.entries(activePlan.days).forEach(([dayKey, dayData]) => {
+      const override = overrides[dayKey];
+      if (!override) { next[dayKey] = dayData; return; }
+      const removed = override.removed || [];
+      const added = override.added || [];
+      const baseSlots = dayData.slots.filter((s) => !removed.includes(s.name));
+      const existingNames = new Set(baseSlots.map((s) => s.name));
+      const addedSlots = added
+        .filter((slotName) => !existingNames.has(slotName))
+        .map((slotName) => ({ name: slotName, exercises: GLOBAL_SLOT_LIBRARY[slotName] || [] }));
+      next[dayKey] = { ...dayData, slots: [...baseSlots, ...addedSlots] };
+    });
+    return next;
+  }, [activePlan, planDayOverrides]);
+
   const activeSchedule = (selectedPlanId && schedules[selectedPlanId]) || null;
 
   // Which weekdays currently have a workout assigned, in calendar order —
@@ -1495,6 +1662,7 @@ export default function WorkoutTracker() {
     setOpenCustomId(null);
     setAddedDraft({});
     setOpenAddedId(null);
+    setHiddenSlots({});
     setAddFlow(null);
     setView("log");
 
@@ -1564,6 +1732,43 @@ export default function WorkoutTracker() {
     setScreen("app");
   }
 
+  function openPlanEditor() {
+    if (!activePlan) return;
+    setScreen("planEditor");
+  }
+
+  // Permanently adds/removes a body-part slot on one of the active plan's
+  // days, recurring every week — the Plan Editor's counterpart to
+  // `toggleSlotHidden`'s one-week-only skip. Toggling a slot that's part of
+  // the plan's own base definition removes it (or un-removes it); toggling
+  // one that only exists because it was added here just drops the addition.
+  function togglePermanentSlot(dayKey, slotName) {
+    if (!activePlan) return;
+    const baseSlotNames = new Set(activePlan.days[dayKey].slots.map((s) => s.name));
+    setPlanDayOverrides((prev) => {
+      const planOverrides = prev[activePlan.id] || {};
+      const dayOverride = planOverrides[dayKey] || { added: [], removed: [] };
+      const isCurrentlyShown = baseSlotNames.has(slotName)
+        ? !dayOverride.removed.includes(slotName)
+        : dayOverride.added.includes(slotName);
+      let nextDayOverride;
+      if (isCurrentlyShown) {
+        // Hide it: either add to `removed` (a base slot) or drop from `added`.
+        nextDayOverride = baseSlotNames.has(slotName)
+          ? { ...dayOverride, removed: [...dayOverride.removed, slotName] }
+          : { ...dayOverride, added: dayOverride.added.filter((n) => n !== slotName) };
+      } else {
+        // Show it again: either drop from `removed` (a base slot) or add to `added`.
+        nextDayOverride = baseSlotNames.has(slotName)
+          ? { ...dayOverride, removed: dayOverride.removed.filter((n) => n !== slotName) }
+          : { ...dayOverride, added: [...dayOverride.added, slotName] };
+      }
+      const updated = { ...prev, [activePlan.id]: { ...planOverrides, [dayKey]: nextDayOverride } };
+      storage.set("plan-day-overrides", JSON.stringify(updated), false).catch(() => {});
+      return updated;
+    });
+  }
+
   function goToHome() {
     setScreen("home");
   }
@@ -1614,94 +1819,84 @@ export default function WorkoutTracker() {
     if (dayLiveWeekKeyRef.current[day] === currentWeekKey) return;
     const saved = weekDrafts[day];
     if (saved && saved.weekKey === currentWeekKey) {
-      setDraft((prev) => ({ ...prev, ...saved.draft }));
+      setDraft((prev) => ({ ...prev, [day]: saved.draft || {} }));
       setCustomDraft((prev) => ({ ...prev, [day]: saved.customDraft || [] }));
       setAddedDraft((prev) => ({ ...prev, [day]: saved.addedDraft || [] }));
+      setHiddenSlots((prev) => ({ ...prev, [day]: saved.hiddenSlots || [] }));
     } else {
-      const daySlotNames = dayData.slots.map((s) => s.name);
-      setDraft((prev) => {
-        const next = { ...prev };
-        daySlotNames.forEach((name) => { delete next[name]; });
-        return next;
-      });
+      setDraft((prev) => ({ ...prev, [day]: {} }));
       setCustomDraft((prev) => ({ ...prev, [day]: [] }));
       setAddedDraft((prev) => ({ ...prev, [day]: [] }));
+      setHiddenSlots((prev) => ({ ...prev, [day]: [] }));
     }
     dayLiveWeekKeyRef.current[day] = currentWeekKey;
   }, [day, dayData, weekDraftsLoaded, weekDrafts, backfill]);
 
-  // Filters out exercises the user has removed from a slot's library, but
-  // never returns an empty list (a slot always needs at least one option).
-  function availableExercises(slotName, exercises) {
-    const removed = (removedFromSlots[selectedPlanId] || {})[slotName] || [];
-    const filtered = exercises.filter((ex) => !removed.includes(ex.name));
-    return filtered.length > 0 ? filtered : exercises;
-  }
-
-  // Permanently removes one exercise from a slot's option list (persisted,
-  // scoped to the active plan). onReset lets the caller pick what to do if
-  // the removed exercise was the one currently selected in whichever card
-  // called this.
-  async function removeExerciseFromLibrary(slotName, exerciseName, allExercises, onReset) {
-    const planRemoved = { ...(removedFromSlots[selectedPlanId] || {}), [slotName]: [...((removedFromSlots[selectedPlanId] || {})[slotName] || []), exerciseName] };
-    const updated = { ...removedFromSlots, [selectedPlanId]: planRemoved };
-    setRemovedFromSlots(updated);
-    try {
-      await storage.set("workout-removed-exercises", JSON.stringify(updated), false);
-    } catch (e) {
-      // best-effort; UI already reflects the removal for this session
-    }
-    const remaining = allExercises.filter((ex) => !planRemoved[slotName].includes(ex.name));
-    if (remaining.length > 0 && onReset) onReset(remaining[0].name);
+  // Hides a fixed plan slot's whole line from today's session — not a
+  // permanent plan edit, just skipped for this week (see `hiddenSlots`
+  // above; resets with the rest of the week's draft). Toggling lets the
+  // same action restore it if hidden by mistake.
+  function toggleSlotHidden(slotName) {
+    setHiddenSlots((prev) => {
+      const current = prev[day] || [];
+      const next = current.includes(slotName) ? current.filter((n) => n !== slotName) : [...current, slotName];
+      return { ...prev, [day]: next };
+    });
   }
 
   function slotDraftOf(slotName) {
-    const avail = availableExercises(slotName, getSlot(day, slotName).exercises);
-    return draft[slotName] || { exercise: avail[0].name, notes: "", attachment: "", sets: [emptyRow()] };
+    const avail = getSlot(day, slotName).exercises;
+    return (draft[day] || {})[slotName] || { exercise: avail[0].name, notes: "", attachment: "", sets: [emptyRow()] };
   }
 
   function setExercise(slotName, exerciseName) {
     setDraft((prev) => {
-      const existing = prev[slotName] || { notes: "", attachment: "", sets: [emptyRow()] };
-      return { ...prev, [slotName]: { ...existing, exercise: exerciseName } };
+      const dayDraft = prev[day] || {};
+      const existing = dayDraft[slotName] || { notes: "", attachment: "", sets: [emptyRow()] };
+      return { ...prev, [day]: { ...dayDraft, [slotName]: { ...existing, exercise: exerciseName } } };
     });
   }
 
   function setNotes(slotName, notes) {
     setDraft((prev) => {
-      const existing = prev[slotName] || slotDraftOf(slotName);
-      return { ...prev, [slotName]: { ...existing, notes } };
+      const dayDraft = prev[day] || {};
+      const existing = dayDraft[slotName] || slotDraftOf(slotName);
+      return { ...prev, [day]: { ...dayDraft, [slotName]: { ...existing, notes } } };
     });
   }
 
   function setAttachment(slotName, attachment) {
     setDraft((prev) => {
-      const existing = prev[slotName] || slotDraftOf(slotName);
-      return { ...prev, [slotName]: { ...existing, attachment } };
+      const dayDraft = prev[day] || {};
+      const existing = dayDraft[slotName] || slotDraftOf(slotName);
+      return { ...prev, [day]: { ...dayDraft, [slotName]: { ...existing, attachment } } };
     });
   }
 
   function updateRow(slotName, index, field, value) {
     setDraft((prev) => {
-      const existing = prev[slotName] || slotDraftOf(slotName);
+      const dayDraft = prev[day] || {};
+      const existing = dayDraft[slotName] || slotDraftOf(slotName);
       const sets = existing.sets.map((s, i) => (i === index ? { ...s, [field]: value } : s));
-      return { ...prev, [slotName]: { ...existing, sets } };
+      return { ...prev, [day]: { ...dayDraft, [slotName]: { ...existing, sets } } };
     });
   }
 
   function addRow(slotName) {
     setDraft((prev) => {
-      const existing = prev[slotName] || slotDraftOf(slotName);
-      return { ...prev, [slotName]: { ...existing, sets: [...existing.sets, emptyRow()] } };
+      const dayDraft = prev[day] || {};
+      const existing = dayDraft[slotName] || slotDraftOf(slotName);
+      return { ...prev, [day]: { ...dayDraft, [slotName]: { ...existing, sets: [...existing.sets, emptyRow()] } } };
     });
   }
 
   function removeRow(slotName, index) {
     setDraft((prev) => {
-      const existing = prev[slotName];
+      const dayDraft = prev[day] || {};
+      const existing = dayDraft[slotName];
       if (!existing) return prev;
       const sets = existing.sets.filter((_, i) => i !== index);
-      return { ...prev, [slotName]: { ...existing, sets: sets.length ? sets : [emptyRow()] } };
+      return { ...prev, [day]: { ...dayDraft, [slotName]: { ...existing, sets: sets.length ? sets : [emptyRow()] } } };
     });
   }
 
@@ -1709,24 +1904,27 @@ export default function WorkoutTracker() {
   // manually entered — separate exercise, weight, and reps.
   function addExtra(slotName, index) {
     setDraft((prev) => {
-      const existing = prev[slotName] || slotDraftOf(slotName);
+      const dayDraft = prev[day] || {};
+      const existing = dayDraft[slotName] || slotDraftOf(slotName);
       const sets = existing.sets.map((s, i) => (i === index ? { ...s, extra: emptyExtra() } : s));
-      return { ...prev, [slotName]: { ...existing, sets } };
+      return { ...prev, [day]: { ...dayDraft, [slotName]: { ...existing, sets } } };
     });
   }
   function updateExtra(slotName, index, field, value) {
     setDraft((prev) => {
-      const existing = prev[slotName] || slotDraftOf(slotName);
+      const dayDraft = prev[day] || {};
+      const existing = dayDraft[slotName] || slotDraftOf(slotName);
       const sets = existing.sets.map((s, i) => (i === index ? { ...s, extra: { ...s.extra, [field]: value } } : s));
-      return { ...prev, [slotName]: { ...existing, sets } };
+      return { ...prev, [day]: { ...dayDraft, [slotName]: { ...existing, sets } } };
     });
   }
   function removeExtra(slotName, index) {
     setDraft((prev) => {
-      const existing = prev[slotName];
+      const dayDraft = prev[day] || {};
+      const existing = dayDraft[slotName];
       if (!existing) return prev;
       const sets = existing.sets.map((s, i) => (i === index ? { ...s, extra: null } : s));
-      return { ...prev, [slotName]: { ...existing, sets } };
+      return { ...prev, [day]: { ...dayDraft, [slotName]: { ...existing, sets } } };
     });
   }
 
@@ -1895,7 +2093,7 @@ export default function WorkoutTracker() {
   // custom exercises are merged in under slot "Custom".
   const sessionBlocks = useMemo(() => {
     const out = [];
-    Object.entries(draft).forEach(([slotName, slotDraft]) => {
+    Object.entries(draft[day] || {}).forEach(([slotName, slotDraft]) => {
       if (!slotDraft) return;
       const type = getExerciseType(day, slotName, slotDraft.exercise);
       const filledSets = slotDraft.sets
@@ -1967,21 +2165,28 @@ export default function WorkoutTracker() {
   const currentWeekEntry = !backfill && day ? weekDrafts[day] : null;
   const hasCurrentWeekEntry = !!(currentWeekEntry && currentWeekEntry.weekKey === weekKeyFor(todayISO()));
 
+  // History sessions still linked to a day's live current-week draft are
+  // already editable right there in the Log tab (with edits re-saving to
+  // this same entry) — History's own edit mode is for everything else,
+  // i.e. genuinely past weeks, so it's hidden for these to avoid two
+  // out-of-sync editing paths for the same entry.
+  const liveLinkedHistoryIds = useMemo(() => {
+    const currentWeekKey = weekKeyFor(todayISO());
+    return new Set(Object.values(weekDrafts).filter((wd) => wd.weekKey === currentWeekKey).map((wd) => wd.sessionId));
+  }, [weekDrafts]);
+
   function discardSession() {
     if (backfill) {
       cancelBackfill();
       return;
     }
     const restoreToSaved = hasCurrentWeekEntry;
-    setDraft((prev) => {
-      const next = { ...prev };
-      (dayData?.slots || []).forEach((s) => { delete next[s.name]; });
-      return restoreToSaved ? { ...next, ...currentWeekEntry.draft } : next;
-    });
+    setDraft((prev) => ({ ...prev, [day]: restoreToSaved ? (currentWeekEntry.draft || {}) : {} }));
     setCustomDraft((prev) => ({ ...prev, [day]: restoreToSaved ? (currentWeekEntry.customDraft || []) : [] }));
     setOpenCustomId(null);
     setAddedDraft((prev) => ({ ...prev, [day]: restoreToSaved ? (currentWeekEntry.addedDraft || []) : [] }));
     setOpenAddedId(null);
+    setHiddenSlots((prev) => ({ ...prev, [day]: restoreToSaved ? (currentWeekEntry.hiddenSlots || []) : [] }));
     setAddFlow(null);
   }
 
@@ -2012,11 +2217,9 @@ export default function WorkoutTracker() {
           // Keep the draft showing for the rest of the week — record what was
           // saved so it survives a reload, and so re-saving later this week
           // updates this entry instead of duplicating it.
-          const daySlotNames = new Set((dayData?.slots || []).map((s) => s.name));
-          const scopedDraft = Object.fromEntries(Object.entries(draft).filter(([k]) => daySlotNames.has(k)));
           const updatedWeekDrafts = {
             ...weekDrafts,
-            [day]: { weekKey: weekKeyFor(sessionDate), sessionId, draft: scopedDraft, customDraft: customList, addedDraft: addedList },
+            [day]: { weekKey: weekKeyFor(sessionDate), sessionId, draft: draft[day] || {}, customDraft: customList, addedDraft: addedList, hiddenSlots: hiddenSlots[day] || [] },
           };
           setWeekDrafts(updatedWeekDrafts);
           storage.set("week-drafts", JSON.stringify(updatedWeekDrafts), false).catch(() => {});
@@ -2050,20 +2253,110 @@ export default function WorkoutTracker() {
           setWeekDrafts(updatedWeekDrafts);
           storage.set("week-drafts", JSON.stringify(updatedWeekDrafts), false).catch(() => {});
           if (linkedDayKey === day) {
-            const linkedSlotNames = (workoutData?.[linkedDayKey]?.slots || []).map((s) => s.name);
-            setDraft((prev) => {
-              const next = { ...prev };
-              linkedSlotNames.forEach((name) => { delete next[name]; });
-              return next;
-            });
+            setDraft((prev) => ({ ...prev, [linkedDayKey]: {} }));
             setCustomDraft((prev) => ({ ...prev, [linkedDayKey]: [] }));
             setAddedDraft((prev) => ({ ...prev, [linkedDayKey]: [] }));
+            setHiddenSlots((prev) => ({ ...prev, [linkedDayKey]: [] }));
             delete dayLiveWeekKeyRef.current[linkedDayKey];
           }
         }
       }
     } catch (e) {
       setStorageError("Couldn't delete — try again.");
+    }
+  }
+
+  // Editing a saved History entry directly — independent of the live
+  // draft/plan machinery (a past session's exercises don't need to match
+  // any current slot's dropdown), so this works on the raw block/set data
+  // exactly as stored, the same shape `sessionBlocks` produces on save.
+  function startEditHistory(session) {
+    setHistoryEditDraft(
+      (session.blocks || []).map((b) => ({ ...b, sets: b.sets.map((s) => ({ ...s, extra: s.extra ? { ...s.extra } : null })) }))
+    );
+    setEditingHistoryId(session.id);
+    setFullHistoryId(session.id);
+  }
+  function cancelEditHistory() {
+    setEditingHistoryId(null);
+    setHistoryEditDraft(null);
+  }
+  function updateEditBlockField(blockIndex, field, value) {
+    setHistoryEditDraft((prev) => prev.map((b, i) => (i === blockIndex ? { ...b, [field]: value } : b)));
+  }
+  function updateEditSetField(blockIndex, setIndex, field, value) {
+    setHistoryEditDraft((prev) =>
+      prev.map((b, i) => (i === blockIndex ? { ...b, sets: b.sets.map((s, j) => (j === setIndex ? { ...s, [field]: value } : s)) } : b))
+    );
+  }
+  function addEditSet(blockIndex) {
+    setHistoryEditDraft((prev) => prev.map((b, i) => (i === blockIndex ? { ...b, sets: [...b.sets, emptyRow()] } : b)));
+  }
+  function removeEditSet(blockIndex, setIndex) {
+    setHistoryEditDraft((prev) =>
+      prev.map((b, i) => (i === blockIndex ? { ...b, sets: b.sets.filter((_, j) => j !== setIndex) } : b))
+    );
+  }
+  function addEditExtra(blockIndex, setIndex) {
+    setHistoryEditDraft((prev) =>
+      prev.map((b, i) => (i === blockIndex ? { ...b, sets: b.sets.map((s, j) => (j === setIndex ? { ...s, extra: emptyExtra() } : s)) } : b))
+    );
+  }
+  function updateEditExtraField(blockIndex, setIndex, field, value) {
+    setHistoryEditDraft((prev) =>
+      prev.map((b, i) =>
+        i === blockIndex ? { ...b, sets: b.sets.map((s, j) => (j === setIndex ? { ...s, extra: { ...s.extra, [field]: value } } : s)) } : b
+      )
+    );
+  }
+  function removeEditExtra(blockIndex, setIndex) {
+    setHistoryEditDraft((prev) =>
+      prev.map((b, i) => (i === blockIndex ? { ...b, sets: b.sets.map((s, j) => (j === setIndex ? { ...s, extra: null } : s)) } : b))
+    );
+  }
+  function removeEditBlock(blockIndex) {
+    setHistoryEditDraft((prev) => prev.filter((_, i) => i !== blockIndex));
+  }
+  function addEditBlock() {
+    setHistoryEditDraft((prev) => [...prev, { slot: "Custom", exercise: "", type: "reps", notes: "", attachment: "", sets: [emptyRow()] }]);
+  }
+
+  // Same "only count a set once it has both a weight and reps (or, for a
+  // timed block, just a duration)" filtering saveWorkout uses for a live
+  // session, applied here to the edited copy before it overwrites history.
+  const cleanedHistoryEdit = useMemo(() => {
+    if (!historyEditDraft) return [];
+    return historyEditDraft
+      .map((b) => {
+        const name = (b.exercise || "").trim();
+        if (!name) return null;
+        const filledSets = b.sets
+          .filter((s) => (b.type === "time" ? s.value !== "" && s.value != null : s.weight !== "" && s.weight != null && s.value !== "" && s.value != null))
+          .map((s) => {
+            const base = { weight: s.weight === "" || s.weight == null ? 0 : Number(s.weight), value: Number(s.value) };
+            const extra = extractExtra(s);
+            return extra ? { ...base, extra } : base;
+          });
+        if (filledSets.length === 0) return null;
+        return { ...b, exercise: name, sets: filledSets };
+      })
+      .filter(Boolean);
+  }, [historyEditDraft]);
+
+  async function saveHistoryEdit(sessionId) {
+    if (cleanedHistoryEdit.length === 0) return;
+    const updated = history.map((h) => (h.id === sessionId ? { ...h, blocks: cleanedHistoryEdit } : h));
+    try {
+      const res = await storage.set("workout-history", JSON.stringify(updated), false);
+      if (res) {
+        setHistory(updated);
+        setEditingHistoryId(null);
+        setHistoryEditDraft(null);
+      } else {
+        setStorageError("Couldn't save — try again.");
+      }
+    } catch (e) {
+      setStorageError("Couldn't save — try again.");
     }
   }
 
@@ -2169,6 +2462,10 @@ export default function WorkoutTracker() {
         <ScheduleScreen plan={activePlan} schedule={scheduleDraft} onSave={saveSchedule} onBack={goToHome} />
       )}
 
+      {screen === "planEditor" && activePlan && (
+        <PlanEditorScreen plan={activePlan} effectiveDays={workoutData} onToggleSlot={togglePermanentSlot} onBack={() => setScreen("app")} />
+      )}
+
       {screen === "addPastWorkout" && activePlan && (
         <AddPastWorkoutSetup plan={activePlan} onStart={startBackfill} onBack={() => setScreen("app")} />
       )}
@@ -2188,6 +2485,9 @@ export default function WorkoutTracker() {
             </button>
             <button onClick={openScheduleEditor} title="Assign days of the week" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)", cursor: "pointer" }}>
               <CalendarIcon size={15} color="var(--text-muted)" />
+            </button>
+            <button onClick={openPlanEditor} title="Edit plan days" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)", cursor: "pointer" }}>
+              <Pencil size={14} color="var(--text-muted)" />
             </button>
             <div style={{ display: "flex", gap: 4, background: "var(--surface)", padding: 3, borderRadius: 10, border: "1px solid var(--border)" }}>
               <button onClick={() => setView("log")} style={{ padding: "6px 12px", borderRadius: 7, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: view === "log" ? "var(--accent)" : "transparent", color: view === "log" ? "var(--on-accent)" : "var(--text-muted)" }}>
@@ -2258,10 +2558,10 @@ export default function WorkoutTracker() {
       {/* Body */}
       {view === "log" ? (
         <div style={{ padding: "10px 16px 120px" }}>
-          {!isCustomBackfill && dayData.slots.map((slot) => {
+          {!isCustomBackfill && dayData.slots.filter((slot) => backfill || !(hiddenSlots[day] || []).includes(slot.name)).map((slot) => {
             const isOpen = openSlot === slot.name;
             const sd = slotDraftOf(slot.name);
-            const availableEx = availableExercises(slot.name, slot.exercises);
+            const availableEx = slot.exercises;
             const type = getExerciseType(day, slot.name, sd.exercise);
             const equip = getExerciseEquip(day, slot.name, sd.exercise);
             const count = countForSlot(slot.name);
@@ -2270,17 +2570,26 @@ export default function WorkoutTracker() {
             const shouldBumpWeight = prevBest && prevBest.type === "reps" && repRange && prevBest.value >= repRange[1];
             return (
               <div key={slot.name} style={{ marginBottom: 10, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
-                <button onClick={() => setOpenSlot(isOpen ? null : slot.name)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 14px", background: "transparent", border: "none", cursor: "pointer", color: "var(--text)" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 8px 6px 14px" }}>
+                  <button onClick={() => setOpenSlot(isOpen ? null : slot.name)} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 8, padding: "7px 0", background: "transparent", border: "none", cursor: "pointer", color: "var(--text)", textAlign: "left" }}>
                     <span style={{ fontSize: 14, fontWeight: 600 }}>{slot.name}</span>
                     {count > 0 && (
                       <span style={{ fontSize: 11, fontWeight: 700, background: type === "time" ? "var(--time-dim)" : "var(--accent-dim)", color: type === "time" ? "var(--time)" : "var(--accent)", borderRadius: 999, padding: "1px 8px" }}>
                         {count} set{count > 1 ? "s" : ""}
                       </span>
                     )}
+                  </button>
+                  <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
+                    {!backfill && (
+                      <button onClick={() => toggleSlotHidden(slot.name)} title="Skip this slot for this week" style={{ background: "none", border: "none", cursor: "pointer", padding: 8 }}>
+                        <Trash2 size={14} color="var(--text-muted)" />
+                      </button>
+                    )}
+                    <button onClick={() => setOpenSlot(isOpen ? null : slot.name)} style={{ background: "none", border: "none", cursor: "pointer", padding: 8 }}>
+                      <ChevronDown size={16} color="var(--text-muted)" style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+                    </button>
                   </div>
-                  <ChevronDown size={16} color="var(--text-muted)" style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
-                </button>
+                </div>
 
                 {isOpen && (
                   <div style={{ padding: "0 14px 14px" }}>
@@ -2290,14 +2599,6 @@ export default function WorkoutTracker() {
                           <option key={ex.name} value={ex.name}>{ex.name}{ex.type === "time" ? " (timed)" : ""}</option>
                         ))}
                       </select>
-                      <button
-                        onClick={() => removeExerciseFromLibrary(slot.name, sd.exercise, slot.exercises, (name) => setExercise(slot.name, name))}
-                        disabled={availableEx.length <= 1}
-                        title="Remove this exercise from the plan"
-                        style={{ flexShrink: 0, width: 38, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", cursor: availableEx.length <= 1 ? "default" : "pointer", opacity: availableEx.length <= 1 ? 0.3 : 1 }}
-                      >
-                        <Trash2 size={14} color="var(--text-muted)" />
-                      </button>
                     </div>
                     <div style={{ fontSize: 10.5, color: "var(--text-muted)", marginBottom: 8 }}>{equip}</div>
 
@@ -2464,14 +2765,27 @@ export default function WorkoutTracker() {
             );
           })}
 
-          {/* Exercises added from the plan's existing library */}
-          {!isCustomBackfill && addedList.length > 0 && (
-            <div className="display" style={{ fontSize: 11, color: "var(--text-muted)", margin: "14px 0 8px" }}>Added From Plan</div>
+          {!isCustomBackfill && !backfill && (hiddenSlots[day] || []).length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+              {(hiddenSlots[day] || []).map((slotName) => (
+                <button
+                  key={slotName}
+                  onClick={() => toggleSlotHidden(slotName)}
+                  style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 10px", borderRadius: 999, background: "var(--surface)", border: "1px dashed var(--border)", cursor: "pointer", color: "var(--text-muted)", fontSize: 11 }}
+                >
+                  <RotateCcw size={11} /> Restore {slotName}
+                </button>
+              ))}
+            </div>
           )}
 
+          {/* Exercises added via the guided flow render inline with the day's
+              fixed slots, right below them — not segregated into their own
+              section, so they read as more of the same session rather than
+              an afterthought. */}
           {!isCustomBackfill && addedList.map((entry) => {
             const isOpen = openAddedId === entry.id;
-            const libraryEx = availableExercises(entry.slotName, slotExerciseLibrary[entry.slotName] || []);
+            const libraryEx = slotExerciseLibrary[entry.slotName] || [];
             const exObj = getExerciseFromLibrary(entry.slotName, entry.exercise);
             const type = exObj?.type || "reps";
             const equip = exObj?.equip || "Dumbbell";
@@ -2513,14 +2827,6 @@ export default function WorkoutTracker() {
                           <option key={ex.name} value={ex.name}>{ex.name}{ex.type === "time" ? " (timed)" : ""}</option>
                         ))}
                       </select>
-                      <button
-                        onClick={() => removeExerciseFromLibrary(entry.slotName, entry.exercise, slotExerciseLibrary[entry.slotName], (name) => setAddedExercise(entry.id, name))}
-                        disabled={libraryEx.length <= 1}
-                        title="Remove this exercise from the plan"
-                        style={{ flexShrink: 0, width: 38, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", cursor: libraryEx.length <= 1 ? "default" : "pointer", opacity: libraryEx.length <= 1 ? 0.3 : 1 }}
-                      >
-                        <Trash2 size={14} color="var(--text-muted)" />
-                      </button>
                     </div>
                     <div style={{ fontSize: 10.5, color: "var(--text-muted)", marginBottom: 8 }}>{equip}</div>
 
@@ -2889,7 +3195,7 @@ export default function WorkoutTracker() {
 
               {addFlow.step === "exercise" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {availableExercises(addFlow.slotName, slotExerciseLibrary[addFlow.slotName] || []).map((ex) => (
+                  {(slotExerciseLibrary[addFlow.slotName] || []).map((ex) => (
                     <button key={ex.name} onClick={() => chooseLibraryExercise(addFlow.slotName, ex.name)} style={{ width: "100%", textAlign: "left", padding: "10px 14px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", cursor: "pointer", color: "var(--text)", fontSize: 13, fontWeight: 600 }}>
                       {ex.name}{ex.type === "time" ? " (timed)" : ""}
                       <span style={{ fontWeight: 400, color: "var(--text-muted)", fontSize: 11 }}> · {ex.equip}</span>
@@ -2930,14 +3236,20 @@ export default function WorkoutTracker() {
               .sort((a, b) => b.date.localeCompare(a.date))
               .map((s) => {
               const blocks = s.blocks || [];
-              const vol = blocks.filter((b) => b.type === "reps").reduce((sum, b) => sum + b.sets.reduce((s2, st) => s2 + st.weight * st.value, 0), 0);
+              const vol = blocks.reduce((sum, b) => {
+                const mainVol = b.type === "reps" ? b.sets.reduce((s2, st) => s2 + st.weight * st.value, 0) : 0;
+                const extraVol = b.sets.reduce((s2, st) => s2 + (st.extra ? st.extra.weight * st.extra.value : 0), 0);
+                return sum + mainVol + extraVol;
+              }, 0);
               const hold = blocks.filter((b) => b.type === "time").reduce((sum, b) => sum + b.sets.reduce((s2, st) => s2 + st.value, 0), 0);
               const isOpen = openHistoryId === s.id;
               const isFull = fullHistoryId === s.id;
+              const isEditing = editingHistoryId === s.id;
+              const canEdit = !liveLinkedHistoryIds.has(s.id);
               return (
                 <div key={s.id} style={{ marginBottom: 10, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
                   <button
-                    onClick={() => { setOpenHistoryId(isOpen ? null : s.id); if (isOpen) setFullHistoryId(null); }}
+                    onClick={() => { setOpenHistoryId(isOpen ? null : s.id); if (isOpen) { setFullHistoryId(null); setEditingHistoryId(null); setHistoryEditDraft(null); } }}
                     style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: 14, background: "transparent", border: "none", cursor: "pointer", textAlign: "left" }}
                   >
                     <div>
@@ -2984,6 +3296,141 @@ export default function WorkoutTracker() {
                             Show Full Detail
                           </button>
                         </>
+                      ) : isEditing ? (
+                        <>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 10 }}>
+                            {historyEditDraft.map((b, bi) => (
+                              <div key={bi} style={{ background: "var(--surface-2)", borderRadius: 10, padding: "10px 12px" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                                  <input
+                                    type="text"
+                                    value={b.exercise}
+                                    onChange={(e) => updateEditBlockField(bi, "exercise", e.target.value)}
+                                    placeholder="Exercise name"
+                                    style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13, fontWeight: 700 }}
+                                  />
+                                  <button onClick={() => removeEditBlock(bi)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, flexShrink: 0 }}>
+                                    <Trash2 size={14} color="var(--text-muted)" />
+                                  </button>
+                                </div>
+                                <input
+                                  type="text"
+                                  value={b.attachment || ""}
+                                  onChange={(e) => updateEditBlockField(bi, "attachment", e.target.value)}
+                                  placeholder="Attachment (optional)"
+                                  style={{ width: "100%", padding: "7px 9px", marginBottom: 6, borderRadius: 7, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
+                                />
+                                <textarea
+                                  rows={2}
+                                  value={b.notes || ""}
+                                  onChange={(e) => updateEditBlockField(bi, "notes", e.target.value)}
+                                  placeholder="Notes"
+                                  style={{ width: "100%", padding: "7px 9px", marginBottom: 8, borderRadius: 7, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5, lineHeight: 1.4 }}
+                                />
+                                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                                  {b.sets.map((st, si) => (
+                                    <div key={si} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                                      <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                                        <span className="tabular" style={{ fontSize: 11, color: "var(--text-muted)", width: 34, flexShrink: 0 }}>Set {si + 1}</span>
+                                        <input
+                                          type="number" inputMode="decimal"
+                                          placeholder={b.type === "time" ? "Wt (opt)" : "Weight"}
+                                          value={st.weight}
+                                          onChange={(e) => updateEditSetField(bi, si, "weight", e.target.value)}
+                                          style={{ flex: 1, minWidth: 0, padding: "8px 6px", borderRadius: 7, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13 }}
+                                        />
+                                        {b.type === "time" ? (
+                                          <input
+                                            type="number" inputMode="numeric"
+                                            placeholder="Sec"
+                                            value={st.value}
+                                            onChange={(e) => updateEditSetField(bi, si, "value", e.target.value)}
+                                            style={{ flex: 1, minWidth: 0, padding: "8px 6px", borderRadius: 7, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13 }}
+                                          />
+                                        ) : (
+                                          <select
+                                            value={st.value}
+                                            onChange={(e) => updateEditSetField(bi, si, "value", e.target.value)}
+                                            style={{ flex: 1, minWidth: 0, padding: "8px 6px", borderRadius: 7, background: "var(--surface)", border: "1px solid var(--border)", color: st.value === "" ? "var(--text-muted)" : "var(--text)", fontSize: 13 }}
+                                          >
+                                            <option value="">Reps</option>
+                                            {REPS_OPTIONS.map((r) => (
+                                              <option key={r} value={r}>{r}</option>
+                                            ))}
+                                          </select>
+                                        )}
+                                        <button onClick={() => removeEditSet(bi, si)} disabled={b.sets.length === 1} style={{ background: "none", border: "none", cursor: b.sets.length === 1 ? "default" : "pointer", padding: 4, opacity: b.sets.length === 1 ? 0.25 : 1, flexShrink: 0 }}>
+                                          <X size={14} color="var(--text-muted)" />
+                                        </button>
+                                      </div>
+                                      {st.extra ? (
+                                        <div style={{ marginLeft: 41, padding: "8px 9px", background: "var(--surface)", border: "1px dashed var(--border)", borderRadius: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                            <div style={{ display: "flex", gap: 4 }}>
+                                              <button onClick={() => updateEditExtraField(bi, si, "type", "superset")} style={{ padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", border: st.extra.type === "superset" ? "1px solid var(--accent)" : "1px solid var(--border)", background: st.extra.type === "superset" ? "var(--accent-dim)" : "transparent", color: st.extra.type === "superset" ? "var(--accent)" : "var(--text-muted)" }}>Superset</button>
+                                              <button onClick={() => updateEditExtraField(bi, si, "type", "dropset")} style={{ padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", border: st.extra.type === "dropset" ? "1px solid var(--accent)" : "1px solid var(--border)", background: st.extra.type === "dropset" ? "var(--accent-dim)" : "transparent", color: st.extra.type === "dropset" ? "var(--accent)" : "var(--text-muted)" }}>Drop Set</button>
+                                            </div>
+                                            <button onClick={() => removeEditExtra(bi, si)} style={{ background: "none", border: "none", cursor: "pointer", padding: 3 }}>
+                                              <X size={12} color="var(--text-muted)" />
+                                            </button>
+                                          </div>
+                                          <input
+                                            type="text"
+                                            placeholder="Exercise name"
+                                            value={st.extra.exercise}
+                                            onChange={(e) => updateEditExtraField(bi, si, "exercise", e.target.value)}
+                                            style={{ width: "100%", padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
+                                          />
+                                          <div style={{ display: "flex", gap: 6 }}>
+                                            <input
+                                              type="number" inputMode="decimal"
+                                              placeholder="Weight"
+                                              value={st.extra.weight}
+                                              onChange={(e) => updateEditExtraField(bi, si, "weight", e.target.value)}
+                                              style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
+                                            />
+                                            <select
+                                              value={st.extra.value}
+                                              onChange={(e) => updateEditExtraField(bi, si, "value", e.target.value)}
+                                              style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: st.extra.value === "" ? "var(--text-muted)" : "var(--text)", fontSize: 12.5 }}
+                                            >
+                                              <option value="">Reps</option>
+                                              {REPS_OPTIONS.map((r) => (
+                                                <option key={r} value={r}>{r}</option>
+                                              ))}
+                                            </select>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <button onClick={() => addEditExtra(bi, si)} style={{ marginLeft: 41, alignSelf: "flex-start", display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: 11 }}>
+                                          <Layers size={11} /> Superset / drop set
+                                        </button>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                                <button onClick={() => addEditSet(bi)} style={{ marginTop: 9, width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "7px", borderRadius: 7, background: "var(--surface)", border: "1px dashed var(--border)", cursor: "pointer", color: "var(--text-muted)", fontSize: 12, fontWeight: 600 }}>
+                                  <Plus size={13} /> Add Set
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                          <button onClick={addEditBlock} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px", marginBottom: 10, borderRadius: 8, background: "transparent", border: "1px dashed var(--accent)", cursor: "pointer", color: "var(--accent)", fontSize: 12.5, fontWeight: 700 }}>
+                            <Plus size={14} /> Add Exercise
+                          </button>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <button onClick={cancelEditHistory} style={{ flex: 1, padding: "9px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer", border: "1px solid var(--border)", background: "transparent", color: "var(--text-muted)" }}>
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => saveHistoryEdit(s.id)}
+                              disabled={cleanedHistoryEdit.length === 0}
+                              style={{ flex: 1, padding: "9px", borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: cleanedHistoryEdit.length === 0 ? "default" : "pointer", border: "none", background: cleanedHistoryEdit.length === 0 ? "var(--surface-2)" : "var(--accent)", color: cleanedHistoryEdit.length === 0 ? "var(--text-muted)" : "var(--on-accent)", boxShadow: cleanedHistoryEdit.length === 0 ? "none" : PRIMARY_SHADOW }}
+                            >
+                              Save Changes
+                            </button>
+                          </div>
+                        </>
                       ) : (
                         <>
                           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 10 }}>
@@ -3016,12 +3463,22 @@ export default function WorkoutTracker() {
                               </div>
                             ))}
                           </div>
-                          <button
-                            onClick={() => setFullHistoryId(null)}
-                            style={{ width: "100%", padding: "8px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1px solid var(--border)", background: "transparent", color: "var(--text-muted)" }}
-                          >
-                            Show Summary
-                          </button>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            {canEdit && (
+                              <button
+                                onClick={() => startEditHistory(s)}
+                                style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "8px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1px solid var(--border)", background: "transparent", color: "var(--text-muted)" }}
+                              >
+                                <Pencil size={12} /> Edit
+                              </button>
+                            )}
+                            <button
+                              onClick={() => setFullHistoryId(null)}
+                              style={{ flex: 1, padding: "8px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1px solid var(--border)", background: "transparent", color: "var(--text-muted)" }}
+                            >
+                              Show Summary
+                            </button>
+                          </div>
                         </>
                       )}
                     </div>
