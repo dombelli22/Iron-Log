@@ -833,6 +833,49 @@ currently linked to a day, and if that day is the one on screen, clears its
 live draft too — so deleting "this week's" entry doesn't leave a populated
 form that's silently no longer backed by any history record.
 
+## Accounts & cloud sync (Supabase)
+
+Optional, local-first. The app still reads/writes `localStorage` exactly as
+before; when someone signs in (Profile → "Account & Sync"), changes are
+copied to/from Supabase in the background. With
+[src/supabaseConfig.js](src/supabaseConfig.js) blank (its state until a
+Supabase project exists) `cloudConfigured` is false and the Account screen
+just says cloud accounts aren't on — nothing else changes.
+
+- [supabase/schema.sql](supabase/schema.sql) (run once in Supabase's SQL
+  editor; steps in [supabase/SETUP.md](supabase/SETUP.md)): `profiles`,
+  `workouts` (one row per workout, `deleted_at` soft-delete tombstones so
+  deletes reach other devices), `user_data` (key/value JSON strings for
+  plans/schedules/settings). RLS: owner-only on all three. `updated_at` is
+  set by a server trigger, never trusted from the client.
+- [src/sync.js](src/sync.js): `createSync({ client, store, ... })`, fully
+  injectable (tested in Node with a fake Supabase and two simulated devices;
+  the test script isn't in the repo). Dirty detection has no flags: it stores
+  `sync-meta` (`ironlog:sync-meta`: per item a content hash + the server
+  `updated_at` last seen). Local hash ≠ remembered → push; cloud
+  `updated_at` newer than remembered → pull. Both changed → workouts keep
+  the local copy (re-pushed), object/array settings merge (`custom-plans`
+  by id, objects key-by-key, the winning side taking ties). A remote delete
+  never removes a locally edited workout. First sign-in merges rather than
+  overwrites. `sync-meta.userId` guards account switching: a *different*
+  account signing in on a device clears the old account's synced keys
+  (instead of uploading them into the new account) and `cloud.js` reloads
+  the page. Signing out keeps local data.
+- [src/storage.js](src/storage.js) `setWriteListener` → `notifyLocalWrite`
+  debounces (1.5s) a push after any write to a synced key. Synced keys:
+  `workout-history`, `profile`, and `selected-plan-id`, `plan-schedules`,
+  `custom-plans`, `plan-day-overrides`, `last-used-exercise`, `rep-range`,
+  `week-drafts`. If a new persisted key should sync, add it to `KV_KEYS`.
+- [src/cloud.js](src/cloud.js): the real client (publishable key only —
+  public by design; **never commit a service_role/secret key**), auth
+  (`signUp`/`signIn`/`signOut`/`resetPassword`, email+password), `useCloud()`
+  hook, and triggers (`online`, tab visible/hidden, `pagehide`).
+  `WorkoutTracker` has a `dataVersion` counter bumped by
+  `sync.onRemoteApplied`; every startup load effect depends on it, so pulled
+  data flows into React state. Password-reset *landing* UI isn't built yet.
+- Not yet built (roadmap): usernames/public profiles + privacy, follows and
+  a shared feed, likes/comments, discovery, report/block/delete-account.
+
 ## Visual design conventions
 
 - Dark theme: `--bg:#101113`, `--surface:#1A1B20`, `--surface-2:#222329`,

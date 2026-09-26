@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Dumbbell, Plus, Trash2, ChevronDown, Save, X, Loader2, History as HistoryIcon, RotateCcw, Timer, TrendingUp, Layers, Home as HomeIcon, Pencil } from "lucide-react";
 import { storage } from "./storage";
+import { useCloud, sync, signIn, signUp, signOut, resetPassword } from "./cloud";
 import { PLAN_LIBRARY, ALL_DAYS_BY_KEY, WEEKDAYS, getScheduledDay, GLOBAL_SLOT_LIBRARY, GLOBAL_SLOT_NAMES, GLOBAL_EXERCISE_LIST, GENERIC_BODY_PARTS } from "./plans";
 import BodyModel from "react-body-highlighter";
 
@@ -883,7 +884,142 @@ function sessionTotals(blocks) {
 const FEED_PAGE = 10;
 const FEED_PREVIEW_EXERCISES = 4;
 
-function ProfileScreen({ profile, stats, history, dayLabelFor, onSave, onBack }) {
+// Everything Iron Log keeps on this device, as one JSON file. Uses the share
+// sheet where available (iOS home-screen apps can't reliably download a blob
+// link, but can "Save to Files" from the share sheet), else a normal download.
+async function downloadBackup() {
+  const data = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith("ironlog:") && k !== "ironlog:sync-meta") data[k.slice(8)] = localStorage.getItem(k);
+  }
+  const json = JSON.stringify({ app: "iron-log", exportedAt: new Date().toISOString(), data }, null, 2);
+  const name = `iron-log-backup-${todayISO()}.json`;
+  const file = new File([json], name, { type: "application/json" });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: name }); return "shared"; } catch (e) { if (e && e.name === "AbortError") return "cancelled"; }
+  }
+  const url = URL.createObjectURL(file);
+  const a = document.createElement("a");
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  return "downloaded";
+}
+
+function AccountScreen({ onBack }) {
+  const cloud = useCloud();
+  const [mode, setMode] = useState("signIn"); // signIn | signUp | reset
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [backupMsg, setBackupMsg] = useState("");
+  async function backup() {
+    try {
+      const r = await downloadBackup();
+      setBackupMsg(r === "cancelled" ? "" : r === "shared" ? "Backup ready — choose \"Save to Files\" to keep it." : "Backup downloaded.");
+    } catch (e) { setBackupMsg("Couldn't create the backup. Try again."); }
+  }
+  const shell = { padding: "calc(24px + env(safe-area-inset-top)) 16px calc(60px + env(safe-area-inset-bottom))", maxWidth: 520, margin: "0 auto" };
+  const fieldStyle = { width: "100%", padding: "11px 12px", borderRadius: 10, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 14, marginBottom: 12 };
+  const labelStyle = { fontSize: 10.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700, marginBottom: 6 };
+  const primary = (enabled) => ({ width: "100%", padding: "13px", borderRadius: 10, background: enabled ? "var(--accent)" : "var(--surface-2)", border: "none", cursor: enabled ? "pointer" : "not-allowed", fontSize: 14, fontWeight: 700, color: enabled ? "var(--on-accent)" : "var(--text-muted)", boxShadow: enabled ? PRIMARY_SHADOW : "none" });
+  const linkBtn = { background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: 12.5, padding: "10px 0", textDecoration: "underline" };
+
+  const friendly = (e) => {
+    const m = (e && e.message) || "Something went wrong";
+    if (/invalid login/i.test(m)) return "That email and password don't match an account.";
+    if (/already registered/i.test(m)) return "An account with that email already exists — try signing in.";
+    if (/failed to fetch|network/i.test(m)) return "Couldn't reach the server. Check your connection and try again.";
+    return m;
+  };
+
+  async function submit(e) {
+    e.preventDefault();
+    setError(""); setNotice(""); setBusy(true);
+    try {
+      if (mode === "signIn") await signIn(email.trim(), password);
+      else if (mode === "signUp") {
+        const { needsConfirmation } = await signUp(email.trim(), password);
+        if (needsConfirmation) { setNotice("Check your email for a confirmation link, then come back and sign in."); setMode("signIn"); setPassword(""); }
+      } else { await resetPassword(email.trim()); setNotice("If that email has an account, a reset link is on its way."); setMode("signIn"); }
+    } catch (err) { setError(friendly(err)); }
+    setBusy(false);
+  }
+
+  const statusText = () => {
+    const s = cloud.sync;
+    if (s.status === "syncing") return "Syncing…";
+    if (s.status === "offline") return "Offline — will sync when you're back online";
+    if (s.status === "error") return `Sync problem: ${s.error}`;
+    if (s.lastSyncAt) return `Up to date · last synced ${new Date(s.lastSyncAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+    return "Starting…";
+  };
+
+  let body;
+  if (!cloud.configured) {
+    body = <div style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.5 }}>Cloud accounts aren't switched on for this copy of the app yet. Everything still works and stays on this device.</div>;
+  } else if (!cloud.ready) {
+    body = <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Loading…</div>;
+  } else if (cloud.user) {
+    body = (
+      <>
+        <div style={{ padding: "14px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", marginBottom: 14 }}>
+          <div style={labelStyle}>Signed in as</div>
+          <div style={{ fontSize: 14, fontWeight: 600, overflowWrap: "anywhere", marginBottom: 10 }}>{cloud.user.email}</div>
+          <div style={{ fontSize: 12.5, color: cloud.sync.status === "error" ? "var(--danger)" : "var(--text-muted)", lineHeight: 1.45 }}>{statusText()}</div>
+        </div>
+        <button onClick={() => sync.syncNow()} disabled={cloud.sync.status === "syncing"} style={{ ...homeChoiceButtonStyle, padding: "11px", textAlign: "center", fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Sync Now</button>
+        <button onClick={() => signOut()} style={{ ...homeChoiceButtonStyle, padding: "11px", textAlign: "center", fontSize: 13, fontWeight: 600, marginBottom: 14 }}>Sign Out</button>
+        <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.5 }}>Your workouts, plans and settings back up automatically and stay in step across every device you sign in on. Signing out keeps the data on this phone.</div>
+      </>
+    );
+  } else {
+    const canSubmit = !busy && /\S+@\S+/.test(email) && (mode === "reset" || password.length >= 6);
+    body = (
+      <form onSubmit={submit}>
+        <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 16 }}>
+          {mode === "signUp" ? "Create an account to back up your training and use it on any device. Everything already on this phone is uploaded to it." : mode === "reset" ? "Enter your email and we'll send a reset link." : "Sign in to back up your training and pick it up on any device."}
+        </div>
+        <div style={labelStyle}>Email</div>
+        <input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} style={fieldStyle} />
+        {mode !== "reset" && (
+          <>
+            <div style={labelStyle}>Password</div>
+            <input type="password" autoComplete={mode === "signUp" ? "new-password" : "current-password"} value={password} onChange={(e) => setPassword(e.target.value)} style={fieldStyle} />
+            {mode === "signUp" && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: -6, marginBottom: 12 }}>At least 6 characters.</div>}
+          </>
+        )}
+        {error && <div style={{ fontSize: 12.5, color: "var(--danger)", marginBottom: 12, lineHeight: 1.4 }}>{error}</div>}
+        {notice && <div style={{ fontSize: 12.5, color: "var(--text)", marginBottom: 12, lineHeight: 1.4 }}>{notice}</div>}
+        <button type="submit" disabled={!canSubmit} style={primary(canSubmit)}>{busy ? "Working…" : mode === "signUp" ? "Create Account" : mode === "reset" ? "Send Reset Link" : "Sign In"}</button>
+        <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginTop: 6 }}>
+          <button type="button" style={linkBtn} onClick={() => { setMode(mode === "signUp" ? "signIn" : "signUp"); setError(""); setNotice(""); }}>{mode === "signUp" ? "I already have an account" : "Create an account"}</button>
+          {mode === "signIn" && <button type="button" style={linkBtn} onClick={() => { setMode("reset"); setError(""); setNotice(""); }}>Forgot password?</button>}
+        </div>
+      </form>
+    );
+  }
+
+  return (
+    <div style={shell}>
+      <button onClick={onBack} style={backLinkStyle}>‹ Back</button>
+      <div className="display" style={{ fontSize: 18, marginBottom: 16 }}>Account &amp; Sync</div>
+      {body}
+      <div style={{ marginTop: 28, paddingTop: 20, borderTop: "1px solid var(--border)" }}>
+        <div style={labelStyle}>Backup</div>
+        <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 12 }}>Save a copy of all your workouts, plans and settings from this device as a file. Worth doing before you sign in for the first time.</div>
+        <button onClick={backup} style={{ ...homeChoiceButtonStyle, padding: "11px", textAlign: "center", fontSize: 13, fontWeight: 600 }}>Download Backup</button>
+        {backupMsg && <div style={{ fontSize: 12.5, marginTop: 10, color: "var(--text)" }}>{backupMsg}</div>}
+      </div>
+    </div>
+  );
+}
+
+function ProfileScreen({ profile, stats, history, dayLabelFor, onSave, onBack, onOpenAccount }) {
+  const cloud = useCloud();
   const hasProfile = !!(profile && profile.displayName);
   const [editing, setEditing] = useState(!hasProfile);
   const [draft, setDraft] = useState({ displayName: "", bio: "", goal: "", photo: "", ...(profile || {}) });
@@ -925,7 +1061,7 @@ function ProfileScreen({ profile, stats, history, dayLabelFor, onSave, onBack })
         </button>
         <div className="display" style={{ fontSize: 18, marginBottom: 4 }}>{hasProfile ? "Edit Profile" : "Set Up Your Profile"}</div>
         <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 20 }}>
-          Stored only on this device for now.
+          {cloud.user ? "Backed up to your account." : "Stored only on this device until you sign in."}
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20 }}>
@@ -993,8 +1129,11 @@ function ProfileScreen({ profile, stats, history, dayLabelFor, onSave, onBack })
       <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginBottom: 14 }}>
         {since ? `Training since ${fmtDate(since)}` : "Just getting started"}
       </div>
-      <button onClick={() => setEditing(true)} style={{ ...homeChoiceButtonStyle, padding: "10px", textAlign: "center", fontSize: 13, fontWeight: 600, marginBottom: 24 }}>
+      <button onClick={() => setEditing(true)} style={{ ...homeChoiceButtonStyle, padding: "10px", textAlign: "center", fontSize: 13, fontWeight: 600, marginBottom: 10 }}>
         Edit Profile
+      </button>
+      <button onClick={onOpenAccount} style={{ ...homeChoiceButtonStyle, padding: "10px", textAlign: "center", fontSize: 13, fontWeight: 600, marginBottom: 24 }}>
+        {cloud.user ? `Account & Sync · ${cloud.sync.status === "error" ? "problem" : cloud.sync.status === "syncing" ? "syncing…" : cloud.sync.status === "offline" ? "offline" : "up to date"}` : "Account & Sync"}
       </button>
 
       <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
@@ -1167,29 +1306,6 @@ function HomeScreen({ activePlan, profile, onContinue, onManageSplit, onOpenProf
 // plus the overarching rep-range setting; the existing choose/build tools
 // (quiz, browse, build-from-scratch) hang off the same hub underneath.
 // ---------------------------------------------------------------------------
-// Everything Iron Log keeps on this device, as one JSON file. Uses the share
-// sheet where available (iOS home-screen apps can't reliably download a blob
-// link, but can "Save to Files" from the share sheet), else a normal download.
-async function downloadBackup() {
-  const data = {};
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (k && k.startsWith("ironlog:") && k !== "ironlog:sync-meta") data[k.slice(8)] = localStorage.getItem(k);
-  }
-  const json = JSON.stringify({ app: "iron-log", exportedAt: new Date().toISOString(), data }, null, 2);
-  const name = `iron-log-backup-${todayISO()}.json`;
-  const file = new File([json], name, { type: "application/json" });
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: name }); return "shared"; } catch (e) { if (e && e.name === "AbortError") return "cancelled"; }
-  }
-  const url = URL.createObjectURL(file);
-  const a = document.createElement("a");
-  a.href = url; a.download = name;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 5000);
-  return "downloaded";
-}
-
 function BackupCard() {
   const [msg, setMsg] = useState("");
   async function backup() {
@@ -2266,6 +2382,10 @@ export default function WorkoutTracker() {
   const [weekDraftsLoaded, setWeekDraftsLoaded] = useState(false);
   const dayLiveWeekKeyRef = useRef({}); // [dayKey]: the weekKey currently reflected in live draft state
   const [completionQuote, setCompletionQuote] = useState(null); // { quote, author } | null — shown after a save
+  // Bumped whenever cloud sync pulls newer data into localStorage; every load
+  // effect below depends on it, so state re-reads from storage.
+  const [dataVersion, setDataVersion] = useState(0);
+  useEffect(() => sync.onRemoteApplied(() => setDataVersion((v) => v + 1)), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -2284,7 +2404,7 @@ export default function WorkoutTracker() {
     }
     loadPlan();
     return () => { cancelled = true; };
-  }, []);
+  }, [dataVersion]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2300,7 +2420,7 @@ export default function WorkoutTracker() {
     }
     loadCustomPlans();
     return () => { cancelled = true; };
-  }, []);
+  }, [dataVersion]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2316,7 +2436,7 @@ export default function WorkoutTracker() {
     }
     loadSchedules();
     return () => { cancelled = true; };
-  }, []);
+  }, [dataVersion]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2332,7 +2452,7 @@ export default function WorkoutTracker() {
     }
     loadPlanDayOverrides();
     return () => { cancelled = true; };
-  }, []);
+  }, [dataVersion]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2348,7 +2468,7 @@ export default function WorkoutTracker() {
     }
     loadLastUsedExercise();
     return () => { cancelled = true; };
-  }, []);
+  }, [dataVersion]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2362,7 +2482,7 @@ export default function WorkoutTracker() {
     }
     loadRepRange();
     return () => { cancelled = true; };
-  }, []);
+  }, [dataVersion]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2376,7 +2496,7 @@ export default function WorkoutTracker() {
     }
     loadProfile();
     return () => { cancelled = true; };
-  }, []);
+  }, [dataVersion]);
 
   function saveProfile(next) {
     setProfile(next);
@@ -2408,7 +2528,7 @@ export default function WorkoutTracker() {
     }
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [dataVersion]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2432,7 +2552,7 @@ export default function WorkoutTracker() {
     }
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [dataVersion]);
 
   const allPlans = useMemo(() => [...PLAN_LIBRARY, ...customPlans], [customPlans]);
   const allDaysByKey = useMemo(() => {
@@ -3355,8 +3475,11 @@ export default function WorkoutTracker() {
           }}
           onSave={saveProfile}
           onBack={goToHome}
+          onOpenAccount={() => setScreen("account")}
         />
       )}
+
+      {screen === "account" && <AccountScreen onBack={() => setScreen("profile")} />}
 
       {screen === "splitBuilder" && (
         <SplitBuilderScreen
