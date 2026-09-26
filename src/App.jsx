@@ -713,6 +713,11 @@ function recommendPlanId({ days, fiveDayStyle, sixDayStyle }) {
 // bottom margin keeps the visual spacing below them the same as before.
 const backLinkStyle = { background: "none", border: "none", cursor: "pointer", padding: "12px 20px 12px 0", margin: "-12px 0 4px", color: "var(--text-muted)", fontSize: 13, minHeight: 44 };
 
+// One look for every choice on the Split Builder hub — none is highlighted.
+const hubChoiceStyle = { width: "100%", textAlign: "left", padding: "16px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", cursor: "pointer", color: "var(--text)", boxShadow: "0 2px 8px rgba(0,0,0,0.28)" };
+const hubChoiceTitle = { fontSize: 15 };
+const hubChoiceDesc = { fontSize: 12, color: "var(--text-muted)", marginTop: 3 };
+
 const homeChoiceButtonStyle = {
   width: "100%", textAlign: "left", padding: "14px", borderRadius: 12, cursor: "pointer",
   background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)",
@@ -947,13 +952,13 @@ function SplitBuilderScreen({ plans, activePlanId, onChoosePlan, onStartBuild, o
             Manage "{activePlan.name}"
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
-            <button onClick={onOpenPlanEditor} style={homeChoiceButtonStyle}>
-              <div style={{ fontWeight: 700, fontSize: 13.5 }}>Edit Training Days</div>
-              <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>Permanently add or remove a body part from any day</div>
+            <button onClick={onOpenPlanEditor} style={hubChoiceStyle}>
+              <div className="display" style={hubChoiceTitle}>Edit Training Days</div>
+              <div style={hubChoiceDesc}>Permanently add or remove a body part from any day</div>
             </button>
-            <button onClick={onOpenSchedule} style={homeChoiceButtonStyle}>
-              <div style={{ fontWeight: 700, fontSize: 13.5 }}>Assign Schedule</div>
-              <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>Choose which real day of the week each session falls on</div>
+            <button onClick={onOpenSchedule} style={hubChoiceStyle}>
+              <div className="display" style={hubChoiceTitle}>Assign Schedule</div>
+              <div style={hubChoiceDesc}>Choose which real day of the week each session falls on</div>
             </button>
           </div>
         </>
@@ -963,17 +968,17 @@ function SplitBuilderScreen({ plans, activePlanId, onChoosePlan, onStartBuild, o
         {activePlan ? "Switch Plan" : "Get Started"}
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
-        <button onClick={startQuiz} style={{ width: "100%", textAlign: "left", padding: "16px", borderRadius: 12, background: "var(--accent)", border: "none", cursor: "pointer", boxShadow: PRIMARY_SHADOW }}>
-          <div className="display" style={{ fontSize: 15, color: "var(--on-accent)" }}>Help Me Choose</div>
-          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.85)", marginTop: 3 }}>Answer a couple quick questions about your schedule and goals</div>
+        <button onClick={startQuiz} style={hubChoiceStyle}>
+          <div className="display" style={hubChoiceTitle}>Help Me Choose</div>
+          <div style={hubChoiceDesc}>Answer a couple quick questions about your schedule and goals</div>
         </button>
-        <button onClick={() => setMode("browse")} style={{ width: "100%", textAlign: "left", padding: "16px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", cursor: "pointer", color: "var(--text)" }}>
-          <div className="display" style={{ fontSize: 15 }}>Suggested Splits</div>
-          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3 }}>See every option and pick one yourself</div>
+        <button onClick={() => setMode("browse")} style={hubChoiceStyle}>
+          <div className="display" style={hubChoiceTitle}>Suggested Splits</div>
+          <div style={hubChoiceDesc}>See every option and pick one yourself</div>
         </button>
-        <button onClick={onStartBuild} style={{ width: "100%", textAlign: "left", padding: "16px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", cursor: "pointer", color: "var(--text)" }}>
-          <div className="display" style={{ fontSize: 15 }}>Build My Own Split</div>
-          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3 }}>Choose the body parts each day hits — you'll pick specific exercises on the day itself</div>
+        <button onClick={onStartBuild} style={hubChoiceStyle}>
+          <div className="display" style={hubChoiceTitle}>Build My Own Split</div>
+          <div style={hubChoiceDesc}>Choose the body parts each day hits — you'll pick specific exercises on the day itself</div>
         </button>
       </div>
 
