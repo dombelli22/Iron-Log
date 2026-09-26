@@ -284,20 +284,42 @@ it's easy to confuse it with:
   the day's built-in slots, not a permanent plan edit.
 
 Persists to `localStorage` key `ironlog:plan-day-overrides`, shape
-`{ [planId]: { [dayKey]: { added: [slotName, ...], removed: [slotName, ...] } } }`.
-`workoutData` (`WorkoutTracker`) is a `useMemo` that layers this on top of
-`activePlan.days` every render: a day with no override behaves exactly as
-authored; otherwise `removed` slot names are filtered out of the day's base
-`slots` and `added` slot names are appended (built fresh from
-`GLOBAL_SLOT_LIBRARY`, so a plan-editor-added slot always reflects the
-current, full exercise list for that slot name). `togglePermanentSlot`
-figures out which of `added`/`removed` a given slot name belongs to from
-the plan's own *base* `days` (not from the current effective list), so
-toggling a base slot off and back on cleanly clears it from `removed`
-again rather than accumulating in `added`, and vice versa for a slot that
-only exists because it was added here. Works identically for built-in
-`PLAN_LIBRARY` plans and user-built custom plans — same override shape,
-keyed by whatever plan id/day key each already has.
+`{ [planId]: { [dayKey]: { added: [{ id, name }, ...], removed: [slotName, ...], subtitle?: string } } }`.
+(`added` entries used to be bare slot-name strings; both forms are still
+read, so older saved data keeps working.) `workoutData` (`WorkoutTracker`)
+is a `useMemo` that layers this on top of `activePlan.days` every render
+via the module-level `buildEffectiveSlots`: `removed` names are filtered
+out of the day's base `slots` and each `added` entry is appended (built
+fresh from `GLOBAL_SLOT_LIBRARY`, so it always reflects the current, full
+exercise list for that slot name); `subtitle`, if present, replaces the
+day's own. Works identically for built-in `PLAN_LIBRARY` plans and
+user-built custom plans — same override shape.
+
+Two things the Plan Editor now supports that it originally didn't:
+
+- **Custom subtitle per day.** A text field at the top of each expanded day
+  (`setDaySubtitle`), persisted in that day's override record and used
+  everywhere the day's subtitle shows (Log header, the editor's collapsed
+  header). An empty subtitle is allowed — the Log header then shows just the
+  day label.
+- **The same body part more than once on a day.** Adding a body part is now
+  always a new instance (`addPermanentSlot`), except that re-adding a *base*
+  slot that had been removed simply restores it. To make that work, every
+  effective slot carries `name` (library slot name — what History and the
+  exercise catalog use), `key` (unique within the day: equals `name` for the
+  first occurrence, `name#<id>` for Plan-Editor-added instances, `name#2`…
+  for duplicate base names), `label` (shown to the user — "Chest — Upper",
+  then "Chest — Upper (2)"), plus `source`/`addedId` so `removePermanentSlot`
+  can tell a base slot (goes into `removed`) from an added instance (dropped
+  from `added` by id). **All per-slot logging state is keyed by `slot.key`,
+  not name**: `draft[day]`, `hiddenSlots`, `openSlot`, and
+  `lastUsedExercise` — so two copies of Chest — Upper on one day hold
+  independent exercises/sets and each remembers its own last-used exercise.
+  Because the first occurrence's key equals its name, everything saved before
+  this change (drafts, hidden slots, last-used) keeps working unchanged.
+  `sessionBlocks` carries `slotKey` in memory only (for `countForSlot` and
+  `lastUsedExercise`) and strips it before saving, so History still just
+  records `slot: "Chest — Upper"` twice, each with its own exercise/sets.
 
 ### Guided plan picker ("Help Me Choose")
 

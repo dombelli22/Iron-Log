@@ -1615,13 +1615,45 @@ function BuildPlanScreen({ existingPlans, onSave, onCancel }) {
   return null;
 }
 
+// Turns a day's base slots plus its Plan Editor override into the slots the
+// app actually renders. Each result has: `name` (library slot name — what
+// History and the exercise catalog use), `key` (unique within the day; equals
+// `name` unless the same body part appears more than once, which is what lets
+// draft/hidden/last-used state stay separate per instance), `label` (what the
+// user sees — "Chest — Upper", then "Chest — Upper (2)"), and `source`/
+// `addedId` (so the Plan Editor knows how to remove it).
+function buildEffectiveSlots(baseSlots, override) {
+  const removed = (override && override.removed) || [];
+  const added = (override && override.added) || [];
+  const out = [];
+  const seen = {};
+  const push = (name, exercises, source, addedId, preferredKey) => {
+    seen[name] = (seen[name] || 0) + 1;
+    const n = seen[name];
+    out.push({
+      name,
+      exercises,
+      key: preferredKey || (n === 1 ? name : `${name}#${n}`),
+      label: n === 1 ? name : `${name} (${n})`,
+      source,
+      addedId,
+    });
+  };
+  baseSlots.filter((s) => !removed.includes(s.name)).forEach((s) => push(s.name, s.exercises, "base", null, null));
+  added.forEach((a) => {
+    const entry = typeof a === "string" ? { name: a, id: null } : a;
+    push(entry.name, GLOBAL_SLOT_LIBRARY[entry.name] || [], "added", entry.id, entry.id ? `${entry.name}#${entry.id}` : null);
+  });
+  return out;
+}
+
 // Permanent, recurring per-day slot editor — add or remove a whole
 // body-part line from one of the active plan's days so it repeats every
 // week. Kept separate from the in-session guided add flow (a one-off
 // addition for today) and from the log screen's per-slot trash icon (a
 // one-week-only skip): changes made here persist across weeks until
 // changed again, the same way the plan's own built-in days do.
-function PlanEditorScreen({ plan, effectiveDays, onToggleSlot, onBack }) {
+function PlanEditorScreen({ plan, effectiveDays, onAddSlot, onRemoveSlot, onSubtitleChange, onBack }) {
   const [openDay, setOpenDay] = useState(null);
   const [addFlow, setAddFlow] = useState(null); // { dayKey, step: "bodyPart" | "slot", bodyPart }
 
@@ -1632,12 +1664,13 @@ function PlanEditorScreen({ plan, effectiveDays, onToggleSlot, onBack }) {
       <button onClick={onBack} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 13, cursor: "pointer", padding: 0, marginBottom: 14 }}>‹ Back</button>
       <div className="display" style={{ fontSize: 20, marginBottom: 4 }}>EDIT PLAN DAYS</div>
       <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 20, lineHeight: 1.5 }}>
-        Permanently add or remove a body-part slot from a day — it repeats every week until you change it again here. For a one-off skip just for this week, use the trash icon on a slot while logging instead.
+        Permanently add or remove a body-part slot from a day, or rename its subtitle — it repeats every week until you change it again here. You can add the same body part more than once per day. For a one-off skip just for this week, use the trash icon on a slot while logging instead.
       </div>
 
       {dayKeys.map((dayKey) => {
         const day = plan.days[dayKey];
-        const effectiveSlots = effectiveDays?.[dayKey]?.slots || day.slots;
+        const effectiveSlots = effectiveDays?.[dayKey]?.slots || [];
+        const effectiveSubtitle = effectiveDays?.[dayKey]?.subtitle ?? day.subtitle;
         const isOpen = openDay === dayKey;
         const flowHere = addFlow && addFlow.dayKey === dayKey ? addFlow : null;
         return (
@@ -1645,16 +1678,25 @@ function PlanEditorScreen({ plan, effectiveDays, onToggleSlot, onBack }) {
             <button onClick={() => { setOpenDay(isOpen ? null : dayKey); setAddFlow(null); }} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 14px", background: "transparent", border: "none", cursor: "pointer", color: "var(--text)" }}>
               <div style={{ textAlign: "left" }}>
                 <div style={{ fontSize: 14, fontWeight: 700 }}>{day.tab}</div>
-                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{day.subtitle}</div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{effectiveSubtitle || "No subtitle"}</div>
               </div>
               <ChevronDown size={16} color="var(--text-muted)" style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
             </button>
             {isOpen && (
               <div style={{ padding: "0 14px 14px" }}>
+                <div style={{ fontSize: 10.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700, marginBottom: 6 }}>Subtitle</div>
+                <input
+                  type="text"
+                  value={effectiveSubtitle}
+                  onChange={(e) => onSubtitleChange(dayKey, e.target.value)}
+                  placeholder="e.g. Chest, Triceps, Front Delts"
+                  style={{ width: "100%", boxSizing: "border-box", padding: "9px 10px", marginBottom: 14, borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13 }}
+                />
+                <div style={{ fontSize: 10.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700, marginBottom: 6 }}>Body Parts</div>
                 {effectiveSlots.map((slot) => (
-                  <div key={slot.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 10px", marginBottom: 6, borderRadius: 8, background: "var(--surface-2)" }}>
-                    <span style={{ fontSize: 13 }}>{slot.name}</span>
-                    <button onClick={() => onToggleSlot(dayKey, slot.name)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+                  <div key={slot.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 10px", marginBottom: 6, borderRadius: 8, background: "var(--surface-2)" }}>
+                    <span style={{ fontSize: 13 }}>{slot.label}</span>
+                    <button onClick={() => onRemoveSlot(dayKey, slot)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
                       <Trash2 size={14} color="var(--text-muted)" />
                     </button>
                   </div>
@@ -1690,15 +1732,14 @@ function PlanEditorScreen({ plan, effectiveDays, onToggleSlot, onBack }) {
                       <button onClick={() => setAddFlow(null)} style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}><X size={14} color="var(--text-muted)" /></button>
                     </div>
                     {(GENERIC_BODY_PARTS[flowHere.bodyPart] || []).map((slotName) => {
-                      const already = effectiveSlots.some((s) => s.name === slotName);
+                      const count = effectiveSlots.filter((s) => s.name === slotName).length;
                       return (
                         <button
                           key={slotName}
-                          onClick={() => { if (!already) { onToggleSlot(dayKey, slotName); setAddFlow(null); } }}
-                          disabled={already}
-                          style={{ width: "100%", textAlign: "left", padding: "10px 12px", marginBottom: 6, borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", cursor: already ? "default" : "pointer", color: already ? "var(--text-muted)" : "var(--text)", fontSize: 13, opacity: already ? 0.5 : 1 }}
+                          onClick={() => { onAddSlot(dayKey, slotName); setAddFlow(null); }}
+                          style={{ width: "100%", textAlign: "left", padding: "10px 12px", marginBottom: 6, borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", cursor: "pointer", color: "var(--text)", fontSize: 13 }}
                         >
-                          {slotName}{already ? " — already on this day" : ""}
+                          {slotName}{count > 0 ? <span style={{ color: "var(--text-muted)" }}> — already {count}x on this day, add another</span> : ""}
                         </button>
                       );
                     })}
@@ -1932,22 +1973,19 @@ export default function WorkoutTracker() {
   // week, unlike `hiddenSlots`) on top of its own `days` — added slots are
   // appended (built from the global catalog), removed slots are filtered
   // out. Plans/days with no override behave exactly as authored.
+  // Every day always goes through `buildEffectiveSlots` (even with no
+  // override), since that's also what gives each slot its unique `key`.
   const workoutData = useMemo(() => {
     if (!activePlan) return null;
-    const overrides = planDayOverrides[activePlan.id];
-    if (!overrides) return activePlan.days;
+    const overrides = planDayOverrides[activePlan.id] || {};
     const next = {};
     Object.entries(activePlan.days).forEach(([dayKey, dayData]) => {
       const override = overrides[dayKey];
-      if (!override) { next[dayKey] = dayData; return; }
-      const removed = override.removed || [];
-      const added = override.added || [];
-      const baseSlots = dayData.slots.filter((s) => !removed.includes(s.name));
-      const existingNames = new Set(baseSlots.map((s) => s.name));
-      const addedSlots = added
-        .filter((slotName) => !existingNames.has(slotName))
-        .map((slotName) => ({ name: slotName, exercises: GLOBAL_SLOT_LIBRARY[slotName] || [] }));
-      next[dayKey] = { ...dayData, slots: [...baseSlots, ...addedSlots] };
+      next[dayKey] = {
+        ...dayData,
+        subtitle: override && override.subtitle !== undefined ? override.subtitle : dayData.subtitle,
+        slots: buildEffectiveSlots(dayData.slots, override),
+      };
     });
     return next;
   }, [activePlan, planDayOverrides]);
@@ -1972,18 +2010,20 @@ export default function WorkoutTracker() {
   const slotExerciseLibrary = GLOBAL_SLOT_LIBRARY;
   const bodyParts = GENERIC_BODY_PARTS;
 
-  function getSlot(d, slotName) {
-    return workoutData[d].slots.find((s) => s.name === slotName);
+  // `slotKey` is a slot's unique key within its day (== its name unless the
+  // same body part appears more than once on that day), not its library name.
+  function getSlot(d, slotKey) {
+    return workoutData[d].slots.find((s) => s.key === slotKey);
   }
-  function getExercise(d, slotName, exerciseName) {
-    const slot = getSlot(d, slotName);
+  function getExercise(d, slotKey, exerciseName) {
+    const slot = getSlot(d, slotKey);
     return slot?.exercises.find((e) => e.name === exerciseName);
   }
-  function getExerciseType(d, slotName, exerciseName) {
-    return getExercise(d, slotName, exerciseName)?.type || "reps";
+  function getExerciseType(d, slotKey, exerciseName) {
+    return getExercise(d, slotKey, exerciseName)?.type || "reps";
   }
-  function getExerciseEquip(d, slotName, exerciseName) {
-    return getExercise(d, slotName, exerciseName)?.equip || "Dumbbell";
+  function getExerciseEquip(d, slotKey, exerciseName) {
+    return getExercise(d, slotKey, exerciseName)?.equip || "Dumbbell";
   }
   function getExerciseFromLibrary(slotName, exerciseName) {
     return (slotExerciseLibrary[slotName] || []).find((e) => e.name === exerciseName);
@@ -2077,36 +2117,49 @@ export default function WorkoutTracker() {
     setScreen("planEditor");
   }
 
-  // Permanently adds/removes a body-part slot on one of the active plan's
-  // days, recurring every week — the Plan Editor's counterpart to
-  // `toggleSlotHidden`'s one-week-only skip. Toggling a slot that's part of
-  // the plan's own base definition removes it (or un-removes it); toggling
-  // one that only exists because it was added here just drops the addition.
-  function togglePermanentSlot(dayKey, slotName) {
+  // Permanent, recurring per-day edits (the Plan Editor's counterpart to
+  // `toggleSlotHidden`'s one-week-only skip). All three write the same
+  // `planDayOverrides[planId][dayKey]` record: `added` (extra slot
+  // instances, `{ id, name }` — or a bare name string from before duplicates
+  // were possible), `removed` (base slot names taken off the day), and
+  // `subtitle` (the day's custom subtitle text).
+  function updateDayOverride(dayKey, updater) {
     if (!activePlan) return;
-    const baseSlotNames = new Set(activePlan.days[dayKey].slots.map((s) => s.name));
     setPlanDayOverrides((prev) => {
       const planOverrides = prev[activePlan.id] || {};
       const dayOverride = planOverrides[dayKey] || { added: [], removed: [] };
-      const isCurrentlyShown = baseSlotNames.has(slotName)
-        ? !dayOverride.removed.includes(slotName)
-        : dayOverride.added.includes(slotName);
-      let nextDayOverride;
-      if (isCurrentlyShown) {
-        // Hide it: either add to `removed` (a base slot) or drop from `added`.
-        nextDayOverride = baseSlotNames.has(slotName)
-          ? { ...dayOverride, removed: [...dayOverride.removed, slotName] }
-          : { ...dayOverride, added: dayOverride.added.filter((n) => n !== slotName) };
-      } else {
-        // Show it again: either drop from `removed` (a base slot) or add to `added`.
-        nextDayOverride = baseSlotNames.has(slotName)
-          ? { ...dayOverride, removed: dayOverride.removed.filter((n) => n !== slotName) }
-          : { ...dayOverride, added: [...dayOverride.added, slotName] };
-      }
-      const updated = { ...prev, [activePlan.id]: { ...planOverrides, [dayKey]: nextDayOverride } };
+      const next = updater({ ...dayOverride, added: dayOverride.added || [], removed: dayOverride.removed || [] });
+      const updated = { ...prev, [activePlan.id]: { ...planOverrides, [dayKey]: next } };
       storage.set("plan-day-overrides", JSON.stringify(updated), false).catch(() => {});
       return updated;
     });
+  }
+
+  // Adding a body part that's a base slot of this day currently removed just
+  // restores it; otherwise it's always a brand-new instance, so the same body
+  // part can appear on a day more than once.
+  function addPermanentSlot(dayKey, slotName) {
+    if (!activePlan) return;
+    const isBase = activePlan.days[dayKey].slots.some((s) => s.name === slotName);
+    updateDayOverride(dayKey, (d) =>
+      isBase && d.removed.includes(slotName)
+        ? { ...d, removed: d.removed.filter((n) => n !== slotName) }
+        : { ...d, added: [...d.added, { id: `${Date.now()}${Math.floor(Math.random() * 1000)}`, name: slotName }] }
+    );
+  }
+
+  // `slot` is an effective slot from `buildEffectiveSlots` (knows whether it
+  // came from the plan itself or from an earlier Plan Editor addition).
+  function removePermanentSlot(dayKey, slot) {
+    updateDayOverride(dayKey, (d) => {
+      if (slot.source === "base") return { ...d, removed: [...d.removed, slot.name] };
+      const idx = d.added.findIndex((a) => (typeof a === "string" ? a === slot.name : a.id === slot.addedId));
+      return idx === -1 ? d : { ...d, added: d.added.filter((_, i) => i !== idx) };
+    });
+  }
+
+  function setDaySubtitle(dayKey, subtitle) {
+    updateDayOverride(dayKey, (d) => ({ ...d, subtitle }));
   }
 
   function goToHome() {
@@ -2441,9 +2494,10 @@ export default function WorkoutTracker() {
   // custom exercises are merged in under slot "Custom".
   const sessionBlocks = useMemo(() => {
     const out = [];
-    Object.entries(draft[day] || {}).forEach(([slotName, slotDraft]) => {
+    Object.entries(draft[day] || {}).forEach(([slotKey, slotDraft]) => {
       if (!slotDraft) return;
-      const type = getExerciseType(day, slotName, slotDraft.exercise);
+      const slotName = getSlot(day, slotKey)?.name || slotKey;
+      const type = getExerciseType(day, slotKey, slotDraft.exercise);
       const filledSets = slotDraft.sets
         .filter((s) => (type === "time" ? s.value !== "" && s.value != null : s.weight !== "" && s.weight != null && s.value !== "" && s.value != null))
         .map((s) => {
@@ -2452,7 +2506,7 @@ export default function WorkoutTracker() {
           return extra ? { ...base, extra } : base;
         });
       if (filledSets.length > 0) {
-        out.push({ slot: slotName, exercise: slotDraft.exercise, type, notes: slotDraft.notes || "", attachment: slotDraft.attachment || "", sets: filledSets });
+        out.push({ slot: slotName, slotKey, exercise: slotDraft.exercise, type, notes: slotDraft.notes || "", attachment: slotDraft.attachment || "", sets: filledSets });
       }
     });
     (customDraft[day] || []).forEach((entry) => {
@@ -2503,8 +2557,8 @@ export default function WorkoutTracker() {
   const animatedVolume = useCountUp(sessionVolume);
   const animatedHoldTime = useCountUp(sessionHoldTime);
 
-  function countForSlot(slotName) {
-    return sessionBlocks.find((b) => b.slot === slotName)?.sets.length || 0;
+  function countForSlot(slotKey) {
+    return sessionBlocks.find((b) => b.slotKey === slotKey)?.sets.length || 0;
   }
 
   // Live (non-backfill) session for the current week already showing in the
@@ -2546,7 +2600,7 @@ export default function WorkoutTracker() {
     const sessionDay = backfill ? (isCustomBackfill ? "Custom Workout" : backfill.dayKey) : day;
     const isUpdatingThisWeek = hasCurrentWeekEntry && history.some((h) => h.id === currentWeekEntry.sessionId);
     const sessionId = isUpdatingThisWeek ? currentWeekEntry.sessionId : `${Date.now()}`;
-    const session = { id: sessionId, date: sessionDate, day: sessionDay, blocks: sessionBlocks };
+    const session = { id: sessionId, date: sessionDate, day: sessionDay, blocks: sessionBlocks.map(({ slotKey, ...block }) => block) };
     try {
       const updated = isUpdatingThisWeek ? history.map((h) => (h.id === sessionId ? session : h)) : [...history, session];
       const res = await storage.set("workout-history", JSON.stringify(updated), false);
@@ -2577,11 +2631,11 @@ export default function WorkoutTracker() {
           // so this same day defaults to it again once the next week resets
           // — a live save only, not a backfill (a backdated entry shouldn't
           // override the default for the day's most recent real occurrence).
-          const fixedBlocks = sessionBlocks.filter((b) => !b.custom && !b.addedFromPlan);
+          const fixedBlocks = sessionBlocks.filter((b) => b.slotKey && !b.custom && !b.addedFromPlan);
           if (fixedBlocks.length > 0) {
             const planLastUsed = { ...(lastUsedExercise[selectedPlanId] || {}) };
             const dayLastUsed = { ...(planLastUsed[day] || {}) };
-            fixedBlocks.forEach((b) => { dayLastUsed[b.slot] = b.exercise; });
+            fixedBlocks.forEach((b) => { dayLastUsed[b.slotKey] = b.exercise; });
             planLastUsed[day] = dayLastUsed;
             const updatedLastUsed = { ...lastUsedExercise, [selectedPlanId]: planLastUsed };
             setLastUsedExercise(updatedLastUsed);
@@ -2840,7 +2894,7 @@ export default function WorkoutTracker() {
       )}
 
       {screen === "planEditor" && activePlan && (
-        <PlanEditorScreen plan={activePlan} effectiveDays={workoutData} onToggleSlot={togglePermanentSlot} onBack={() => setScreen("splitBuilder")} />
+        <PlanEditorScreen plan={activePlan} effectiveDays={workoutData} onAddSlot={addPermanentSlot} onRemoveSlot={removePermanentSlot} onSubtitleChange={setDaySubtitle} onBack={() => setScreen("splitBuilder")} />
       )}
 
       {screen === "addPastWorkout" && activePlan && (
@@ -2900,7 +2954,7 @@ export default function WorkoutTracker() {
 
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "0 16px 12px" }}>
               <div className="display" style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.08em" }}>
-                {isCustomBackfill ? "Custom Workout" : `${dayData.label} · ${dayData.subtitle}`}
+                {isCustomBackfill ? "Custom Workout" : dayData.subtitle ? `${dayData.label} · ${dayData.subtitle}` : dayData.label}
               </div>
               <div key={`${sessionVolume}-${sessionHoldTime}`} className={sessionBlocks.length > 0 ? "flash-pop" : ""} style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
                 {sessionHoldTime > 0 && (
@@ -2929,21 +2983,21 @@ export default function WorkoutTracker() {
       {/* Body */}
       {view === "log" ? (
         <div style={{ padding: "10px 16px 120px" }}>
-          {!isCustomBackfill && dayData.slots.filter((slot) => backfill || !(hiddenSlots[day] || []).includes(slot.name)).map((slot) => {
-            const isOpen = openSlot === slot.name;
-            const sd = slotDraftOf(slot.name);
+          {!isCustomBackfill && dayData.slots.filter((slot) => backfill || !(hiddenSlots[day] || []).includes(slot.key)).map((slot) => {
+            const isOpen = openSlot === slot.key;
+            const sd = slotDraftOf(slot.key);
             const availableEx = slot.exercises;
-            const type = getExerciseType(day, slot.name, sd.exercise);
-            const equip = getExerciseEquip(day, slot.name, sd.exercise);
-            const count = countForSlot(slot.name);
+            const type = getExerciseType(day, slot.key, sd.exercise);
+            const equip = getExerciseEquip(day, slot.key, sd.exercise);
+            const count = countForSlot(slot.key);
             const prevBest = getPreviousBest(sd.exercise);
             const repRange = repRangeSetting;
             const shouldBumpWeight = prevBest && prevBest.type === "reps" && repRange && prevBest.value >= repRange[1];
             return (
-              <div key={slot.name} style={{ marginBottom: 10, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
+              <div key={slot.key} style={{ marginBottom: 10, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 8px 6px 14px" }}>
-                  <button onClick={() => setOpenSlot(isOpen ? null : slot.name)} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 8, padding: "7px 0", background: "transparent", border: "none", cursor: "pointer", color: "var(--text)", textAlign: "left" }}>
-                    <span style={{ fontSize: 14, fontWeight: 600 }}>{slot.name}</span>
+                  <button onClick={() => setOpenSlot(isOpen ? null : slot.key)} style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 8, padding: "7px 0", background: "transparent", border: "none", cursor: "pointer", color: "var(--text)", textAlign: "left" }}>
+                    <span style={{ fontSize: 14, fontWeight: 600 }}>{slot.label}</span>
                     {count > 0 && (
                       <span style={{ fontSize: 11, fontWeight: 700, background: type === "time" ? "var(--time-dim)" : "var(--accent-dim)", color: type === "time" ? "var(--time)" : "var(--accent)", borderRadius: 999, padding: "1px 8px" }}>
                         {count} set{count > 1 ? "s" : ""}
@@ -2952,11 +3006,11 @@ export default function WorkoutTracker() {
                   </button>
                   <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
                     {!backfill && (
-                      <button onClick={() => toggleSlotHidden(slot.name)} title="Skip this slot for this week" style={{ background: "none", border: "none", cursor: "pointer", padding: 8 }}>
+                      <button onClick={() => toggleSlotHidden(slot.key)} title="Skip this slot for this week" style={{ background: "none", border: "none", cursor: "pointer", padding: 8 }}>
                         <Trash2 size={14} color="var(--text-muted)" />
                       </button>
                     )}
-                    <button onClick={() => setOpenSlot(isOpen ? null : slot.name)} style={{ background: "none", border: "none", cursor: "pointer", padding: 8 }}>
+                    <button onClick={() => setOpenSlot(isOpen ? null : slot.key)} style={{ background: "none", border: "none", cursor: "pointer", padding: 8 }}>
                       <ChevronDown size={16} color="var(--text-muted)" style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
                     </button>
                   </div>
@@ -2965,7 +3019,7 @@ export default function WorkoutTracker() {
                 {isOpen && (
                   <div style={{ padding: "0 14px 14px" }}>
                     <div style={{ display: "flex", gap: 6, marginBottom: 4 }}>
-                      <select value={sd.exercise} onChange={(e) => setExercise(slot.name, e.target.value)} style={{ flex: 1, minWidth: 0, padding: "9px 10px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13 }}>
+                      <select value={sd.exercise} onChange={(e) => setExercise(slot.key, e.target.value)} style={{ flex: 1, minWidth: 0, padding: "9px 10px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13 }}>
                         {availableEx.map((ex) => (
                           <option key={ex.name} value={ex.name}>{ex.name}{ex.type === "time" ? " (timed)" : ""}</option>
                         ))}
@@ -2976,7 +3030,7 @@ export default function WorkoutTracker() {
                     {equip === "Cable" && (
                       <select
                         value={sd.attachment || ""}
-                        onChange={(e) => setAttachment(slot.name, e.target.value)}
+                        onChange={(e) => setAttachment(slot.key, e.target.value)}
                         style={{ width: "100%", padding: "8px 10px", marginBottom: 10, borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", color: sd.attachment ? "var(--text)" : "var(--text-muted)", fontSize: 12.5 }}
                       >
                         <option value="">Attachment (optional)</option>
@@ -3028,7 +3082,7 @@ export default function WorkoutTracker() {
                       rows={2}
                       placeholder="Notes for this exercise (form cues, adjustments...)"
                       value={sd.notes || ""}
-                      onChange={(e) => setNotes(slot.name, e.target.value)}
+                      onChange={(e) => setNotes(slot.key, e.target.value)}
                       style={{ width: "100%", padding: "8px 10px", marginBottom: 10, borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5, lineHeight: 1.4 }}
                     />
 
@@ -3041,7 +3095,7 @@ export default function WorkoutTracker() {
                               type="number" inputMode="decimal"
                               placeholder={type === "time" ? "Wt (opt)" : "Weight"}
                               value={row.weight}
-                              onChange={(e) => updateRow(slot.name, i, "weight", e.target.value)}
+                              onChange={(e) => updateRow(slot.key, i, "weight", e.target.value)}
                               style={{ flex: 1, minWidth: 0, padding: "9px 6px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13 }}
                             />
 
@@ -3051,7 +3105,7 @@ export default function WorkoutTracker() {
                                   type="number" inputMode="numeric"
                                   placeholder="Sec"
                                   value={row.value}
-                                  onChange={(e) => updateRow(slot.name, i, "value", e.target.value)}
+                                  onChange={(e) => updateRow(slot.key, i, "value", e.target.value)}
                                   style={{ width: "100%", padding: "9px 8px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13 }}
                                 />
                                 <Timer size={12} color="var(--time)" style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
@@ -3061,12 +3115,12 @@ export default function WorkoutTracker() {
                                 type="number" inputMode="numeric"
                                 placeholder="Reps"
                                 value={row.value}
-                                onChange={(e) => updateRow(slot.name, i, "value", e.target.value)}
+                                onChange={(e) => updateRow(slot.key, i, "value", e.target.value)}
                                 style={{ flex: 1, minWidth: 0, padding: "9px 6px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13 }}
                               />
                             )}
 
-                            <button onClick={() => removeRow(slot.name, i)} disabled={sd.sets.length === 1} style={{ background: "none", border: "none", cursor: sd.sets.length === 1 ? "default" : "pointer", padding: 4, opacity: sd.sets.length === 1 ? 0.25 : 1, flexShrink: 0 }}>
+                            <button onClick={() => removeRow(slot.key, i)} disabled={sd.sets.length === 1} style={{ background: "none", border: "none", cursor: sd.sets.length === 1 ? "default" : "pointer", padding: 4, opacity: sd.sets.length === 1 ? 0.25 : 1, flexShrink: 0 }}>
                               <X size={14} color="var(--text-muted)" />
                             </button>
                           </div>
@@ -3075,10 +3129,10 @@ export default function WorkoutTracker() {
                             <div style={{ marginLeft: 41, padding: "8px 9px", background: "var(--surface)", border: "1px dashed var(--border)", borderRadius: 8, display: "flex", flexDirection: "column", gap: 6 }}>
                               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                                 <div style={{ display: "flex", gap: 4 }}>
-                                  <button onClick={() => { updateExtra(slot.name, i, "type", "superset"); if (row.extra.type === "dropset") updateExtra(slot.name, i, "exercise", ""); }} style={{ padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", border: row.extra.type === "superset" ? "1px solid var(--accent)" : "1px solid var(--border)", background: row.extra.type === "superset" ? "var(--accent-dim)" : "transparent", color: row.extra.type === "superset" ? "var(--accent)" : "var(--text-muted)" }}>Superset</button>
-                                  <button onClick={() => { updateExtra(slot.name, i, "type", "dropset"); updateExtra(slot.name, i, "exercise", sd.exercise); }} style={{ padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", border: row.extra.type === "dropset" ? "1px solid var(--accent)" : "1px solid var(--border)", background: row.extra.type === "dropset" ? "var(--accent-dim)" : "transparent", color: row.extra.type === "dropset" ? "var(--accent)" : "var(--text-muted)" }}>Drop Set</button>
+                                  <button onClick={() => { updateExtra(slot.key, i, "type", "superset"); if (row.extra.type === "dropset") updateExtra(slot.key, i, "exercise", ""); }} style={{ padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", border: row.extra.type === "superset" ? "1px solid var(--accent)" : "1px solid var(--border)", background: row.extra.type === "superset" ? "var(--accent-dim)" : "transparent", color: row.extra.type === "superset" ? "var(--accent)" : "var(--text-muted)" }}>Superset</button>
+                                  <button onClick={() => { updateExtra(slot.key, i, "type", "dropset"); updateExtra(slot.key, i, "exercise", sd.exercise); }} style={{ padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", border: row.extra.type === "dropset" ? "1px solid var(--accent)" : "1px solid var(--border)", background: row.extra.type === "dropset" ? "var(--accent-dim)" : "transparent", color: row.extra.type === "dropset" ? "var(--accent)" : "var(--text-muted)" }}>Drop Set</button>
                                 </div>
-                                <button onClick={() => removeExtra(slot.name, i)} style={{ background: "none", border: "none", cursor: "pointer", padding: 3 }}>
+                                <button onClick={() => removeExtra(slot.key, i)} style={{ background: "none", border: "none", cursor: "pointer", padding: 3 }}>
                                   <X size={12} color="var(--text-muted)" />
                                 </button>
                               </div>
@@ -3091,7 +3145,7 @@ export default function WorkoutTracker() {
                                   type="text"
                                   placeholder="Exercise name"
                                   value={row.extra.exercise}
-                                  onChange={(e) => updateExtra(slot.name, i, "exercise", e.target.value)}
+                                  onChange={(e) => updateExtra(slot.key, i, "exercise", e.target.value)}
                                   style={{ width: "100%", padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
                                 />
                               )}
@@ -3100,20 +3154,20 @@ export default function WorkoutTracker() {
                                   type="number" inputMode="decimal"
                                   placeholder="Weight"
                                   value={row.extra.weight}
-                                  onChange={(e) => updateExtra(slot.name, i, "weight", e.target.value)}
+                                  onChange={(e) => updateExtra(slot.key, i, "weight", e.target.value)}
                                   style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
                                 />
                                 <input
                                   type="number" inputMode="numeric"
                                   placeholder="Reps"
                                   value={row.extra.value}
-                                  onChange={(e) => updateExtra(slot.name, i, "value", e.target.value)}
+                                  onChange={(e) => updateExtra(slot.key, i, "value", e.target.value)}
                                   style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
                                 />
                               </div>
                             </div>
                           ) : (
-                            <button onClick={() => addExtra(slot.name, i)} style={{ marginLeft: 41, alignSelf: "flex-start", display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: 11 }}>
+                            <button onClick={() => addExtra(slot.key, i)} style={{ marginLeft: 41, alignSelf: "flex-start", display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: 11 }}>
                               <Layers size={11} /> Superset / drop set
                             </button>
                           )}
@@ -3121,7 +3175,7 @@ export default function WorkoutTracker() {
                       ))}
                     </div>
 
-                    <button onClick={() => addRow(slot.name)} style={{ marginTop: 9, width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "8px", borderRadius: 8, background: "var(--surface-2)", border: "1px dashed var(--border)", cursor: "pointer", color: "var(--text-muted)", fontSize: 12.5, fontWeight: 600 }}>
+                    <button onClick={() => addRow(slot.key)} style={{ marginTop: 9, width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "8px", borderRadius: 8, background: "var(--surface-2)", border: "1px dashed var(--border)", cursor: "pointer", color: "var(--text-muted)", fontSize: 12.5, fontWeight: 600 }}>
                       <Plus size={14} /> Add Set
                     </button>
                   </div>
@@ -3132,13 +3186,13 @@ export default function WorkoutTracker() {
 
           {!isCustomBackfill && !backfill && (hiddenSlots[day] || []).length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
-              {(hiddenSlots[day] || []).map((slotName) => (
+              {(hiddenSlots[day] || []).map((slotKey) => (
                 <button
-                  key={slotName}
-                  onClick={() => toggleSlotHidden(slotName)}
+                  key={slotKey}
+                  onClick={() => toggleSlotHidden(slotKey)}
                   style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 10px", borderRadius: 999, background: "var(--surface)", border: "1px dashed var(--border)", cursor: "pointer", color: "var(--text-muted)", fontSize: 11 }}
                 >
-                  <RotateCcw size={11} /> Restore {slotName}
+                  <RotateCcw size={11} /> Restore {getSlot(day, slotKey)?.label || slotKey}
                 </button>
               ))}
             </div>
