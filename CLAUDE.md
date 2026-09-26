@@ -69,10 +69,11 @@ The app is no longer built around one hardcoded plan, and no plan is framed
 as "yours" or original to any one person — they're presented as equal,
 generic options since anyone using the app picks from the same library.
 [src/plans.js](src/plans.js) exports `PLAN_LIBRARY` — currently 6 splits,
-each `{ id, name, description, days, defaultSchedule }`, picked from on the
-Home screen (`Home` is a `screen` state in `App.jsx`, always shown first on
-load, separate from the `view` state that toggles Log/History once inside a
-plan): a 5-day PPL+Upper/Lower hybrid, Push/Pull/Legs (6-day), Upper/Lower
+each `{ id, name, description, days, defaultSchedule }`, picked from within
+the Split Builder screen (see below) — reached from Home (`Home` is a
+`screen` state in `App.jsx`, always shown first on load, separate from the
+`view` state that toggles Log/History once inside a plan): a 5-day
+PPL+Upper/Lower hybrid, Push/Pull/Legs (6-day), Upper/Lower
 (4-day), Full Body (3-day), Bro Split (5-day: chest/back/shoulders/arms/legs,
 one muscle group per day), and Arnold Split (6-day: chest+back and
 shoulders+arms paired together rather than push/pull, run twice, plus a leg
@@ -89,10 +90,10 @@ has a Chest — Upper slot, with nothing to keep in sync across plans. This
 replaced an earlier version of this file where each plan's days inlined
 their own (sometimes deliberately different, for A/B variety) exercise
 arrays per slot — that variety is gone now in favor of one comprehensive,
-consistent list per slot everywhere. Only touch `MUSCLE_MAP`/`REP_RANGE_TYPE`
-in `App.jsx` when adding a genuinely new exercise name to `SLOT_LIBRARY`;
-reusing an existing name (even across slots, e.g. `"Bulgarian Split Squat"`
-appearing in both `"Quads — Primary"` and `"Glutes"`) needs nothing extra.
+consistent list per slot everywhere. Only touch `MUSCLE_MAP` in `App.jsx`
+when adding a genuinely new exercise name to `SLOT_LIBRARY`; reusing an
+existing name (even across slots, e.g. `"Bulgarian Split Squat"` appearing
+in both `"Quads — Primary"` and `"Glutes"`) needs nothing extra.
 A `"Rear Delts"` / `"Shoulders — Rear"` naming split that pre-dated this
 consolidation was merged into one `"Rear Delts"` slot name.
 
@@ -181,9 +182,10 @@ applied silently.
   with `defaultSchedule`, so the user assigns/confirms real days before
   logging anything. Picking a plan that already has a saved schedule skips
   straight back into the app on the right day.
-- The calendar icon in the app header (`openScheduleEditor`) re-opens the
-  editor for the active plan anytime, pre-filled with its *current* schedule
-  (not the default) — this is how assignments get changed later.
+- "Assign Schedule" in the Split Builder hub (`openScheduleEditor`)
+  re-opens the editor for the active plan anytime, pre-filled with its
+  *current* schedule (not the default) — this is how assignments get
+  changed later.
 - Persists to `localStorage` key `ironlog:plan-schedules`, shape
   `{ [planId]: schedule }` — scoped per plan like `planDayOverrides` (below).
 - The day-tab bar is driven by the schedule, not by `Object.keys(plan.days)`:
@@ -200,13 +202,39 @@ applied silently.
 - History stays global across plans (a lifting log is more useful unified
   than split up), just labeled per-entry via `ALL_DAYS_BY_KEY`.
 
+### Home and the Split Builder
+
+`HomeScreen` (`App.jsx`) is deliberately minimal: a "Continue with X" card
+(when a plan is active) and one "Manage Split" button. Everything about
+choosing, building, or editing a split — the quiz, the browse list, the
+from-scratch builder, permanent per-day editing, and schedule assignment —
+used to be spread across Home itself plus two separate header icons; all of
+it now lives in one dedicated `SplitBuilderScreen` (`screen === "splitBuilder"`),
+reached only via that "Manage Split" button, with its own "‹ Back" returning
+to Home. The app header inside a plan (`screen === "app"`) now carries just
+the Home icon and the Log/History tabs — no calendar or pencil icon — since
+schedule assignment and plan-day editing are reached through the Split
+Builder hub instead. `openScheduleEditor`/`openPlanEditor` (`WorkoutTracker`)
+are unchanged as functions, just called from the hub's buttons now; both
+screens' "back" targets go to `"splitBuilder"` rather than `"home"`/`"app"`,
+since that's uniformly where they're entered from now (including the
+first-time schedule prompt right after picking a new plan, since picking a
+plan now also happens from within the Split Builder).
+
+The Split Builder hub (`SplitBuilderScreen`'s `mode === "landing"`) shows,
+when a plan is active, that plan's own "Manage '{name}'" actions (Edit
+Training Days, Assign Schedule) above the plan-switching tools below them;
+with no active plan yet, only the switching tools show. It also hosts the
+overarching rep-range setting (see "Data model" below) at the bottom,
+since that's a global preference, not scoped to any one plan.
+
 ### Permanent per-day editing ("Plan Editor")
 
-The pencil icon in the app header (`openPlanEditor`, next to the schedule's
-calendar icon) opens `PlanEditorScreen` — add or permanently remove a whole
-body-part slot from one of the active plan's days, recurring every week
-until changed again here. This is deliberately a *third*, separate
-mechanism alongside two things it's easy to confuse it with:
+`PlanEditorScreen`, reached from the Split Builder hub's "Edit Training
+Days" button — add or permanently remove a whole body-part slot from one
+of the active plan's days, recurring every week until changed again here.
+This is deliberately a *third*, separate mechanism alongside two things
+it's easy to confuse it with:
 
 - The guided "Existing within database" add flow (`addedDraft`) is a
   one-off addition for **today's session only** — gone again once that
@@ -234,14 +262,14 @@ keyed by whatever plan id/day key each already has.
 
 ### Guided plan picker ("Help Me Choose")
 
-`HomeScreen` (`App.jsx`) has its own internal `mode` state (`landing` →
-`quizDays` → optionally `quizStyle` → `recommend`, or `landing` → `browse`)
-separate from the app-level `screen` state — this is all still "Home", just
-sub-navigation within it. Landing offers two entry points: "Help Me Choose"
-(the quiz) or "Suggested Splits" (the plain list, same cards as before) —
-that label reads oddly against what the button does (a plain browse list,
-not curated suggestions); it's deliberate, requested wording, not an
-oversight.
+`SplitBuilderScreen` (`App.jsx`) has its own internal `mode` state
+(`landing` → `quizDays` → optionally `quizStyle` → `recommend`, or
+`landing` → `browse`) separate from the app-level `screen` state — this is
+all still "the hub", just sub-navigation within it. Its "Switch Plan"
+section offers two entry points: "Help Me Choose" (the quiz) or "Suggested
+Splits" (the plain list, same cards as before) — that label reads oddly
+against what the button does (a plain browse list, not curated
+suggestions); it's deliberate, requested wording, not an oversight.
 
 The quiz asks how many days a week (3/4/5/6), then — only at 5 or 6 days,
 where more than one plan fits — a tiebreak style question (frequency vs.
@@ -257,11 +285,12 @@ browse list.
 
 ### Custom plan builder ("Build My Own Split")
 
-The third Home landing option (`BuildPlanScreen` in `App.jsx`) lets a user
-build a plan with no built-in template. It's a small step machine
-(`name` → `days` → per-day sub-steps → back to `days` → save) entirely
-local to that component; the parent only receives the finished result via
-`onSave({ name, days })` when the user hits "Save & Finish".
+The third option in the Split Builder hub's "Switch Plan" section
+(`BuildPlanScreen` in `App.jsx`) lets a user build a plan with no built-in
+template. It's a small step machine (`name` → `days` → per-day sub-steps →
+back to `days` → save) entirely local to that component; the parent only
+receives the finished result via `onSave({ name, days })` when the user
+hits "Save & Finish".
 
 - Adding a day has two top-level paths: **choose from existing** (pick any
   day, by its `tab` name, from any plan in `existingPlans` — grouped by
@@ -270,23 +299,32 @@ local to that component; the parent only receives the finished result via
   the typed name after an existing day's slots (same picker, but only
   `slots` is cloned, the typed name replaces `label`/`tab`) or build from
   scratch.
-- "Build from scratch" adds one slot at a time; the slot name and the
-  exercise name each independently toggle (`ModeToggle`) between "Choose
-  Existing" (a `<select>`) and "Type My Own" (free text). `GLOBAL_SLOT_LIBRARY`/
-  `GLOBAL_SLOT_NAMES`/`GLOBAL_EXERCISE_LIST` (`plans.js`) back the dropdowns —
-  `GLOBAL_SLOT_LIBRARY` is just `SLOT_LIBRARY` re-exported (see "Workout
-  plans" above), so **built-in plans only**, not merged with any user's
-  custom plans at runtime (reusing something a custom plan invented is a
-  nice-to-have, not the point of this list).
-  Picking an existing slot scopes the exercise dropdown to that slot's own
-  exercise pool (falls back to every exercise in the app if the slot name
-  doesn't match a known one); picking an existing exercise auto-fills its
-  known `type`/`equip` and hides the manual type/equip selectors, since
-  they're already known. An exercise chosen from the dropdown is a real
-  `MUSCLE_MAP` entry, so it gets the full muscle-diagram treatment same as
-  any built-in plan's exercise; one typed manually won't have a
-  `MUSCLE_MAP`/`REP_RANGE_TYPE` entry, so it just won't show a muscle
-  diagram or rep-range nudge — same graceful fallback custom-typed
+- "Build from scratch" adds **body parts, not exercises** — matching how a
+  day is meant to be composed everywhere else in the app now (see
+  `hiddenSlots`/`lastUsedExercise` under "Data model"): picking a slot name
+  that already exists in `GLOBAL_SLOT_LIBRARY` (via `ModeToggle`'s "Choose
+  Existing") adds it immediately with that slot's full exercise list —
+  no exercise picker at all, since which specific exercise gets chosen live
+  on the workout day. Only a genuinely new slot name (`ModeToggle`'s "Type
+  My Own", nothing in the library to draw from yet) still asks for one seed
+  exercise to start it off, via the same "Choose Existing"/"Type My Own"
+  toggle as before for the exercise itself. `GLOBAL_SLOT_LIBRARY`/
+  `GLOBAL_SLOT_NAMES`/`GLOBAL_EXERCISE_LIST` (`plans.js`) back the
+  dropdowns — `GLOBAL_SLOT_LIBRARY` is just `SLOT_LIBRARY` re-exported (see
+  "Workout plans" above), so **built-in plans only**, not merged with any
+  user's custom plans at runtime (reusing something a custom plan invented
+  is a nice-to-have, not the point of this list). `addScratchSlot`
+  (`App.jsx`) is where this branches: known slot name → `GLOBAL_SLOT_LIBRARY[name]`
+  wholesale; unknown → the single typed/picked exercise, same as before.
+  This replaced the original behavior, where even picking a known slot name
+  still locked the day to whichever one exercise you'd also picked at build
+  time — a real gap, not a deliberate restriction: a from-scratch day's slot
+  never got the same "any exercise in this slot's library" flexibility a
+  built-in plan's slot always had, until this fix.
+  An exercise chosen from a dropdown (either path) is a real `MUSCLE_MAP`
+  entry, so it gets the full muscle-diagram treatment same as any built-in
+  plan's exercise; one typed manually won't have a `MUSCLE_MAP` entry, so it
+  just won't show a muscle diagram — same graceful fallback custom-typed
   exercises already get elsewhere in the app, not a bug.
 - On save, `App.jsx`'s `saveCustomPlan` assigns the plan a
   `custom-<timestamp>` id, and namespaces every day key as `<planId>::<i>`
@@ -300,8 +338,8 @@ local to that component; the parent only receives the finished result via
   objects, same shape as a `PLAN_LIBRARY` entry. `WorkoutTracker` merges
   them in via `allPlans` (`[...PLAN_LIBRARY, ...customPlans]`) and
   `allDaysByKey` (`{...ALL_DAYS_BY_KEY, ...each custom plan's days}`) —
-  everything downstream (Home's plan list, the quiz, schedule assignment,
-  history labels) reads from these merged values, not the static-only
+  everything downstream (the Split Builder's plan list, the quiz, schedule
+  assignment, history labels) reads from these merged values, not the static-only
   exports from `plans.js`, so a custom plan behaves identically to a
   built-in one everywhere. `enterPlan(plan)` takes the plan **object**
   (not an id looked up from `allPlans`) specifically so a just-built custom
@@ -326,9 +364,13 @@ weights vary too much machine-to-machine and gym-to-gym to hand-roll a
 range per equipment type. This used to be a generated per-equipment dropdown
 (`weightOptionsFor`/`BARBELL_WEIGHTS`/etc. in `App.jsx`); that whole
 subsystem was removed when weight became manual, so don't reintroduce it
-without removing the manual input first. Reps are still a dropdown 1–20 for
-`"reps"` type (this doesn't vary by gym, unlike weight) — timed exercises get
-a free-text seconds input instead (holds run well past 20).
+without removing the manual input first. Reps are a manual number input too
+now, for the same reason — a fixed 1–20 dropdown (`REPS_OPTIONS`, since
+removed) was arbitrary and didn't let anyone log a set outside that range;
+timed exercises still get a free-text seconds input, unchanged. Every reps
+field in the app uses the same plain `<input type="number">` now: fixed
+slots, added-from-plan, custom exercises, superset/drop-set extras across
+all three, and the History-entry editor's sets and extras.
 
 `MUSCLE_MAP`: keyed by exercise name (not by slot — names are reused across
 days), gives `primary`/`secondary` muscle keys for the whole-body diagram,
@@ -383,10 +425,17 @@ primary/secondary status object into the package's
 `{ name, muscles, frequency }` data shape (`frequency: 2` for primary,
 `1` for secondary, matched to `highlightedColors` index `frequency - 1`).
 
-`REP_RANGE_TYPE`: keyed by exercise name, `"compound"` (6–10 reps) or
-`"isolation"` (10–15 reps) — this is the hypertrophy rep-range convention the
-whole plan was built around. Used to show a "bump the weight" nudge when the
-last logged set for that exercise hit or exceeded the top of its range.
+`repRangeSetting` (`WorkoutTracker` state, `[min, max]`, default `[8, 12]`,
+persisted to `localStorage` key `ironlog:rep-range`, editable from the Split
+Builder hub): one overarching rep-range target, used everywhere the "bump
+the weight" nudge shows — hit or exceed `max` on an exercise's last logged
+set and it flags. This replaced `REP_RANGE_TYPE`, a per-exercise
+`"compound"` (6–10)/`"isolation"` (10–15) classification hardcoded for every
+catalog exercise — removed entirely, `[min, max]` are read directly at both
+call sites instead of going through a lookup. The old scheme only ever
+nudged exercises that had an explicit entry in that table (every catalog
+exercise did, but a typed/custom one never could); the single overarching
+range now applies uniformly to any reps-type exercise, catalog or custom.
 
 `slotExerciseLibrary` / `bodyParts`: power the guided "Existing within
 database" add-exercise flow (generic body part → specific slot →
@@ -458,10 +507,24 @@ show up correctly in the picker.
   only be removed permanently via the Plan Editor (previous section) or
   skipped for the current week via `hiddenSlots` — nothing prunes one
   specific exercise choice out of a slot's dropdown anymore.
+- `lastUsedExercise` (`WorkoutTracker` state, persisted to `localStorage`
+  key `ironlog:last-used-exercise`): `{ [planId]: { [dayKey]: { [slotName]: exerciseName } } }`
+  — whichever specific exercise was last logged for a given fixed slot on a
+  given day, which is what a slot defaults to once its week resets, instead
+  of always falling back to the slot's first library entry
+  (`defaultExerciseFor`/`slotDraftOf`). This is what makes a body-part-only
+  day (see "Custom plan builder" and "Permanent per-day editing" above)
+  actually usable week to week: you pick a specific exercise once, and it
+  keeps showing up as the default from then on, still changeable anytime
+  via the same dropdown. Written in `saveWorkout`, live saves only — a
+  backfilled (backdated) entry never overwrites the default for the day's
+  most recent real occurrence — from every fixed-slot block in that
+  session (`!custom && !addedFromPlan`); `addedDraft`/`customDraft` entries
+  aren't tracked here since they're not tied to a recurring slot.
 - Every `sets` entry is `{ weight, value, extra }` — `extra` is an optional
   attached superset/drop-set: `{ type: "superset"|"dropset", exercise, weight, value }`.
-  `weight` is always a manual number entry; `value` (reps) is a 1–20 dropdown,
-  same `REPS_OPTIONS` list the main sets use. `exercise` behaves differently
+  `weight` and `value` (reps) are both manual number entries, same as the
+  main sets. `exercise` behaves differently
   per type: a drop set is, by definition, the same movement at a lighter
   weight, so its `exercise` is forced to match the parent set's exercise —
   shown as a locked/disabled display, not an editable field — and gets

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { Dumbbell, Plus, Trash2, ChevronDown, Save, X, Loader2, History as HistoryIcon, RotateCcw, Timer, TrendingUp, Layers, Home as HomeIcon, Calendar as CalendarIcon, Pencil } from "lucide-react";
+import { Dumbbell, Plus, Trash2, ChevronDown, Save, X, Loader2, History as HistoryIcon, RotateCcw, Timer, TrendingUp, Layers, Home as HomeIcon, Pencil } from "lucide-react";
 import { storage } from "./storage";
 import { PLAN_LIBRARY, ALL_DAYS_BY_KEY, WEEKDAYS, getScheduledDay, GLOBAL_SLOT_LIBRARY, GLOBAL_SLOT_NAMES, GLOBAL_EXERCISE_LIST, GENERIC_BODY_PARTS } from "./plans";
 import BodyModel from "react-body-highlighter";
@@ -13,15 +13,6 @@ const fmtDate = (iso) => {
 
 const emptyRow = () => ({ weight: "", value: "", extra: null });
 const emptyExtra = () => ({ type: "superset", exercise: "", weight: "", value: "" });
-
-// Dropdown option generator (reps only — weight is manual entry since it
-// varies by machine/gym).
-function range(start, end, step) {
-  const out = [];
-  for (let w = start; w <= end + 1e-9; w += step) out.push(Math.round(w * 100) / 100);
-  return out;
-}
-const REPS_OPTIONS = range(1, 20, 1);
 
 // A completed workout's week runs Monday-Sunday; this key (that Monday's
 // date) is what decides whether a day's logged data should still be
@@ -325,70 +316,12 @@ const MUSCLE_MAP = {
   "Weighted Side Plank": { primary: ["obliques"], secondary: ["abs"] },
 };
 
-// ---------------------------------------------------------------------------
-// Hypertrophy rep-range targets, from the original split: compound/press
-// movements target 6–10 reps, isolation/fly movements target 10–15. Used to
-// flag when your last session already hit (or passed) the top of range.
-// ---------------------------------------------------------------------------
-const RANGE_BY_TYPE = { compound: [6, 10], isolation: [10, 15] };
-const REP_RANGE_TYPE = {
-  "Machine Incline Press": "compound", "Incline DB Press": "compound", "Incline Barbell Press": "compound",
-  "Incline DB Fly": "isolation", "Incline Cable Fly": "isolation", "Incline Machine Fly": "isolation", "Decline Push-Up": "compound",
-  "Flat Barbell Press": "compound", "Flat DB Press": "compound", "Flat DB Fly": "isolation", "Flat Cable Fly": "isolation",
-  "Pec Deck Fly": "isolation", "Push-Up": "compound",
-  "Decline DB Fly": "isolation", "Decline Cable Fly": "isolation", "Decline DB Press": "compound", "Decline Barbell Press": "compound",
-  "Machine Chest Press": "compound", "Machine Decline Press": "compound", "Chest Dip": "compound", "Incline Push-Up": "compound",
-  "Overhead DB Extension": "isolation", "Overhead Cable Extension": "isolation", "Overhead EZ-Bar Extension": "isolation", "Overhead Barbell Extension": "isolation", "JM Press": "isolation",
-  "Single-Arm Cable Pushdown": "isolation", "Rope or Bar Pushdown": "isolation", "V-Bar Pushdown": "isolation",
-  "Machine Triceps Extension": "isolation", "Bench Dip": "isolation",
-  "Close-Grip Barbell Bench Press": "compound", "Close-Grip DB Bench Press": "compound",
-  "Reverse-Grip Cable Pushdown": "isolation", "Diamond Push-Up": "compound",
-  "DB Skull Crushers": "isolation", "Barbell or EZ-Bar Skull Crushers": "isolation",
-  "Cable Front Raise": "isolation", "DB Front Raise": "isolation", "Barbell Front Raise": "isolation", "Incline DB Front Raise": "isolation",
-  "Lat Pulldown": "compound", "Wide-Grip Lat Pulldown": "compound", "Close-Grip Lat Pulldown": "compound",
-  "Single-Arm Lat Pulldown": "compound", "Pull-Up": "compound", "Chin-Up": "compound", "Neutral-Grip Pull-Up": "compound",
-  "Barbell Row": "compound", "Pendlay Row": "compound", "DB Row": "compound", "Seated Cable Row": "compound", "Single-Arm Cable Row": "compound",
-  "Chest-Supported DB Row": "compound", "Chest-Supported Barbell/T-Bar Row": "compound",
-  "T-Bar Row": "compound", "Machine Row": "compound", "Inverted Row": "compound", "Meadows Row": "compound", "Seal Row": "compound",
-  "Barbell Deadlift": "compound", "Rack Pull": "compound", "DB Deadlift": "compound", "Straight-Arm Pulldown": "isolation",
-  "Cable Pullover": "isolation", "DB Pullover": "isolation",
-  "Bayesian Curl": "isolation", "Incline DB Curl": "isolation", "Standing Barbell Curl": "isolation", "Cross-Body Cable Curl": "isolation",
-  "Preacher Curl": "isolation", "Spider Curl": "isolation", "Concentration Curl": "isolation", "Wide-Grip EZ-Bar Curl": "isolation", "Machine Preacher Curl": "isolation",
-  "Cable Preacher Curl": "isolation", "DB Hammer Curl": "isolation", "Cable Hammer Curl": "isolation", "Cross-Body Hammer Curl": "isolation",
-  "Reverse-Grip Barbell Curl": "isolation", "Reverse-Grip EZ-Bar Curl": "isolation",
-  "Barbell or EZ-Bar Curl": "isolation", "DB Curl": "isolation", "Cable Curl": "isolation",
-  "Reverse Pec Deck": "isolation", "Face Pull": "isolation", "DB Reverse Fly": "isolation", "Cable Reverse Fly": "isolation",
-  "Bent-Over DB Rear Delt Fly": "isolation", "Incline DB Rear Delt Fly": "isolation",
-  "Seated DB Overhead Press": "compound", "Seated Barbell Overhead Press": "compound", "Standing Barbell Overhead Press": "compound",
-  "Cable Overhead Press": "compound", "Machine Shoulder Press": "compound", "Arnold Press": "compound",
-  "Cable Lateral Raise": "isolation", "DB Lateral Raise": "isolation", "Machine Lateral Raise": "isolation",
-  "Incline DB Lateral Raise": "isolation", "Egyptian Lateral Raise": "isolation", "Upright Row": "isolation",
-  "Barbell Shrug": "isolation", "DB Shrug": "isolation", "Trap Bar Shrug": "isolation", "Smith Machine Shrug": "isolation",
-  "Cable Shrug": "isolation", "Behind-the-Back Barbell Shrug": "isolation", "Snatch-Grip Shrug": "isolation",
-  "Cable Upright Row": "isolation", "DB Upright Row": "isolation", "Y-Raise": "isolation",
-  "Back Squat": "compound", "Front Squat": "compound", "Goblet Squat": "compound", "Hack Squat": "compound", "Sissy Squat": "isolation", "Leg Press": "compound",
-  "Barbell RDL": "compound", "DB RDL": "compound", "Good Morning": "compound", "Nordic Ham Curl": "isolation",
-  "Seated Leg Curl Machine": "isolation", "Lying Leg Curl Machine": "isolation",
-  "Bulgarian Split Squat": "compound", "Walking Lunges": "compound",
-  "Hip Thrust": "compound", "Cable Kickback": "isolation", "Glute Bridge": "isolation", "Cable Pull-Through": "compound",
-  "Cable Hip Abduction": "isolation", "Cable Hip Adduction": "isolation", "Sumo Squat": "compound",
-  "Standing Calf Raise": "isolation", "Single-Leg DB Calf Raise": "isolation", "Barbell Calf Raise": "isolation",
-  "Seated Calf Raise": "isolation", "Leg Press Calf Raise": "isolation",
-  "Leg Extension Machine": "isolation", "Leg Curl Machine": "isolation", "Hip Abductor Machine": "isolation", "Hip Adductor Machine": "isolation",
-  "Cable Crunch": "isolation", "Hanging Leg Raise": "isolation", "Hanging Knee Raise": "isolation", "Captain's Chair Leg Raise": "isolation",
-  "Machine Crunch": "isolation", "Decline Sit-Up": "isolation", "Weighted Decline Sit-Up": "isolation", "Reverse Crunch": "isolation",
-  "Ab Wheel Rollout": "isolation", "Toes-to-Bar": "isolation", "Sit-Up": "isolation",
-  "Cable Woodchopper (High-to-Low)": "isolation", "Cable Woodchopper (Low-to-High)": "isolation", "Russian Twist": "isolation",
-  "Hanging Oblique Raise": "isolation", "Standing Side Bend": "isolation", "Landmine Rotation": "isolation",
-  // Plank, Weighted Plank, Hollow Body Hold, Side Plank, and Weighted Side
-  // Plank are timed T() exercises — excluded here the same way Farmer's
-  // Carry and the other holds are, since the rep-range nudge only applies
-  // to rep-counted sets.
-};
-function getRepRange(exerciseName) {
-  const t = REP_RANGE_TYPE[exerciseName];
-  return t ? RANGE_BY_TYPE[t] : null;
-}
+// Rep-range targeting used to be a fixed compound/isolation split baked in
+// per exercise here (6–10 vs 10–15). Replaced by one overarching range the
+// user sets themselves from the Split Builder hub (`repRangeSetting` in
+// WorkoutTracker) — applies uniformly to every reps exercise, including
+// custom/typed ones that never had a per-exercise entry here to match
+// against before.
 
 function getMuscleStatus(exerciseName) {
   const map = MUSCLE_MAP[exerciseName];
@@ -537,7 +470,57 @@ const homeChoiceButtonStyle = {
 };
 const PRIMARY_SHADOW = "0 4px 14px rgba(214,41,59,0.35)";
 
-function HomeScreen({ plans, activePlanId, onChoosePlan, onContinue, onStartBuild }) {
+// Landing screen: just enough to get into a session (Continue) or into the
+// Split Builder for everything else (choosing, building, or editing a
+// split, and its schedule) — all of that used to live here directly, but
+// consolidating it into one dedicated screen kept this one from having to
+// juggle "pick a plan" and "log a workout" at once.
+function HomeScreen({ activePlan, onContinue, onManageSplit }) {
+  const header = (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginBottom: 4 }}>
+      <Dumbbell size={22} color="var(--accent)" />
+      <span className="brand" style={{ fontSize: 30, lineHeight: 1 }}>IRON LOG</span>
+    </div>
+  );
+  return (
+    <div style={{ padding: "calc(24px + env(safe-area-inset-top)) 16px calc(60px + env(safe-area-inset-bottom))", maxWidth: 520, margin: "0 auto" }}>
+      {header}
+      <div className="display" style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center", letterSpacing: "0.08em", marginBottom: 28 }}>
+        {activePlan ? "Ready to Train" : "Let's Get Started"}
+      </div>
+
+      {activePlan ? (
+        <button
+          onClick={onContinue}
+          style={{ width: "100%", textAlign: "left", padding: "16px", borderRadius: 12, background: "var(--accent-dim)", border: "1px solid var(--accent)", cursor: "pointer", marginBottom: 16, color: "var(--text)", boxShadow: "0 2px 8px rgba(0,0,0,0.28)" }}
+        >
+          <div style={{ fontSize: 11, color: "var(--accent)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Continue</div>
+          <div className="display" style={{ fontSize: 16 }}>{activePlan.name}</div>
+        </button>
+      ) : (
+        <div style={{ fontSize: 12.5, color: "var(--text-muted)", textAlign: "center", lineHeight: 1.5, marginBottom: 20 }}>
+          You don't have a training split set up yet.
+        </div>
+      )}
+
+      <button onClick={onManageSplit} style={{ width: "100%", textAlign: "left", padding: "16px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", cursor: "pointer", color: "var(--text)" }}>
+        <div className="display" style={{ fontSize: 15 }}>Manage Split</div>
+        <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3 }}>Browse, build, or edit your training split, and set your schedule</div>
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// The "all purpose" split builder — every tool for choosing, building, and
+// editing a training split lives here, reached from Home's "Manage Split"
+// button rather than scattered across Home itself and separate header
+// icons. Its own landing hub (mode === "landing") shows, when a plan is
+// active, that plan's own management actions (edit days, assign schedule)
+// plus the overarching rep-range setting; the existing choose/build tools
+// (quiz, browse, build-from-scratch) hang off the same hub underneath.
+// ---------------------------------------------------------------------------
+function SplitBuilderScreen({ plans, activePlanId, onChoosePlan, onStartBuild, onOpenPlanEditor, onOpenSchedule, onBack, repRange, onRepRangeChange }) {
   const activePlan = plans.find((p) => p.id === activePlanId);
   // landing -> quizDays -> [quizStyle] -> recommend, or landing -> browse
   const [mode, setMode] = useState("landing");
@@ -702,24 +685,34 @@ function HomeScreen({ plans, activePlanId, onChoosePlan, onContinue, onStartBuil
   return (
     <div style={{ padding: "calc(24px + env(safe-area-inset-top)) 16px calc(60px + env(safe-area-inset-bottom))", maxWidth: 520, margin: "0 auto" }}>
       {header}
+      <div style={{ height: 24 }} />
+      <BackButton onClick={onBack} />
       <div className="display" style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center", letterSpacing: "0.08em", marginBottom: 28 }}>
-        Choose Your Workout Split
+        Split Builder
       </div>
 
       {activePlan && (
-        <button
-          onClick={onContinue}
-          style={{ width: "100%", textAlign: "left", padding: "16px", borderRadius: 12, background: "var(--accent-dim)", border: "1px solid var(--accent)", cursor: "pointer", marginBottom: 24, color: "var(--text)", boxShadow: "0 2px 8px rgba(0,0,0,0.28)" }}
-        >
-          <div style={{ fontSize: 11, color: "var(--accent)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Continue</div>
-          <div className="display" style={{ fontSize: 16 }}>{activePlan.name}</div>
-        </button>
+        <>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700, marginBottom: 10 }}>
+            Manage "{activePlan.name}"
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
+            <button onClick={onOpenPlanEditor} style={homeChoiceButtonStyle}>
+              <div style={{ fontWeight: 700, fontSize: 13.5 }}>Edit Training Days</div>
+              <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>Permanently add or remove a body part from any day</div>
+            </button>
+            <button onClick={onOpenSchedule} style={homeChoiceButtonStyle}>
+              <div style={{ fontWeight: 700, fontSize: 13.5 }}>Assign Schedule</div>
+              <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>Choose which real day of the week each session falls on</div>
+            </button>
+          </div>
+        </>
       )}
 
       <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700, marginBottom: 10 }}>
         {activePlan ? "Switch Plan" : "Get Started"}
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
         <button onClick={startQuiz} style={{ width: "100%", textAlign: "left", padding: "16px", borderRadius: 12, background: "var(--accent)", border: "none", cursor: "pointer", boxShadow: PRIMARY_SHADOW }}>
           <div className="display" style={{ fontSize: 15, color: "var(--on-accent)" }}>Help Me Choose</div>
           <div style={{ fontSize: 12, color: "rgba(255,255,255,0.85)", marginTop: 3 }}>Answer a couple quick questions about your schedule and goals</div>
@@ -730,12 +723,34 @@ function HomeScreen({ plans, activePlanId, onChoosePlan, onContinue, onStartBuil
         </button>
         <button onClick={onStartBuild} style={{ width: "100%", textAlign: "left", padding: "16px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", cursor: "pointer", color: "var(--text)" }}>
           <div className="display" style={{ fontSize: 15 }}>Build My Own Split</div>
-          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3 }}>Build a custom split day by day</div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3 }}>Choose the body parts each day hits — you'll pick specific exercises on the day itself</div>
         </button>
       </div>
 
-      <div style={{ fontSize: 11.5, color: "var(--text-muted)", textAlign: "center", lineHeight: 1.5, marginTop: 24 }}>
-        Once you're in a plan, you can add or remove specific exercises in each slot to make it your own.
+      <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700, marginBottom: 10 }}>
+        Rep Range
+      </div>
+      <div style={{ padding: "14px 16px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)" }}>
+        <div style={{ fontSize: 11.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 12 }}>
+          One overarching range for every exercise — hit the top of it on a set and Iron Log will nudge you to bump
+          the weight next time.
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <input
+            type="number" inputMode="numeric"
+            value={repRange[0]}
+            onChange={(e) => onRepRangeChange(0, e.target.value)}
+            style={{ width: 60, padding: "9px 10px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 14, textAlign: "center" }}
+          />
+          <span style={{ color: "var(--text-muted)", fontSize: 13 }}>to</span>
+          <input
+            type="number" inputMode="numeric"
+            value={repRange[1]}
+            onChange={(e) => onRepRangeChange(1, e.target.value)}
+            style={{ width: 60, padding: "9px 10px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 14, textAlign: "center" }}
+          />
+          <span style={{ color: "var(--text-muted)", fontSize: 13 }}>reps</span>
+        </div>
       </div>
     </div>
   );
@@ -1057,9 +1072,22 @@ function BuildPlanScreen({ existingPlans, onSave, onCancel }) {
     addDay({ label: customLabel, tab: customLabel, subtitle: d.subtitle, slots: d.slots });
   }
 
+  // Picking an existing slot name adds it with the shared library's full
+  // exercise list (a body part, not one locked-in exercise) — matches how
+  // built-in plans' slots already work, and what the specific exercise gets
+  // chosen live, on the workout day itself. A slot name that doesn't exist
+  // in the library yet has no catalog to draw from, so it still needs one
+  // seed exercise typed/picked in to start it off.
   function addScratchSlot() {
-    if (!slotNameDraft.trim() || !exerciseNameDraft.trim()) return;
-    setScratchSlots((prev) => [...prev, { name: slotNameDraft.trim(), exercises: [{ name: exerciseNameDraft.trim(), type: exerciseTypeDraft, equip: exerciseEquipDraft }] }]);
+    const name = slotNameDraft.trim();
+    if (!name) return;
+    if (slotEntryMode === "existing" && GLOBAL_SLOT_LIBRARY[name]) {
+      setScratchSlots((prev) => [...prev, { name, exercises: GLOBAL_SLOT_LIBRARY[name] }]);
+      setSlotNameDraft("");
+      return;
+    }
+    if (!exerciseNameDraft.trim()) return;
+    setScratchSlots((prev) => [...prev, { name, exercises: [{ name: exerciseNameDraft.trim(), type: exerciseTypeDraft, equip: exerciseEquipDraft }] }]);
     setSlotNameDraft("");
     setExerciseNameDraft("");
   }
@@ -1237,18 +1265,23 @@ function BuildPlanScreen({ existingPlans, onSave, onCancel }) {
   }
 
   if (step === "dayScratch") {
+    const isKnownSlot = slotEntryMode === "existing" && !!GLOBAL_SLOT_LIBRARY[slotNameDraft];
+    const canAddSlot = slotNameDraft.trim() && (isKnownSlot || exerciseNameDraft.trim());
     return shell(() => setStep("dayModelChoice"), (
       <>
         <div className="display" style={{ fontSize: 18, marginBottom: 4 }}>Build "{customLabel}" From Scratch</div>
         <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 16 }}>
-          Add each exercise slot one at a time — a slot name (like "Chest — Upper" or just "Chest") and an exercise for it.
+          Add each body part this day should hit — pick from the existing library and you're done, its whole exercise
+          list comes with it (you'll choose which specific exercise to actually do on your workout day itself). Type
+          your own slot name instead if it's something brand new.
         </div>
         {scratchSlots.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
             {scratchSlots.map((s, i) => (
               <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 12px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)" }}>
                 <div style={{ fontSize: 12.5 }}>
-                  <span style={{ color: "var(--text-muted)" }}>{s.name}:</span> {s.exercises[0].name}
+                  <span style={{ color: "var(--text-muted)" }}>{s.name}:</span>{" "}
+                  {s.exercises.length > 1 ? `${s.exercises.length} exercises available` : s.exercises[0].name}
                 </div>
                 <button onClick={() => setScratchSlots((prev) => prev.filter((_, idx) => idx !== i))} style={{ background: "none", border: "none", cursor: "pointer" }}>
                   <X size={13} color="var(--text-muted)" />
@@ -1258,11 +1291,11 @@ function BuildPlanScreen({ existingPlans, onSave, onCancel }) {
           </div>
         )}
         <div style={{ padding: "12px", borderRadius: 10, background: "var(--surface-2)", border: "1px solid var(--border)", marginBottom: 16 }}>
-          <div style={{ fontSize: 10.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700, marginBottom: 6 }}>Slot</div>
+          <div style={{ fontSize: 10.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700, marginBottom: 6 }}>Body Part / Slot</div>
           <ModeToggle mode={slotEntryMode} onChange={(m) => { setSlotEntryMode(m); setSlotNameDraft(""); }} existingLabel="Choose Existing" manualLabel="Type My Own" />
           {slotEntryMode === "existing" ? (
-            <select value={slotNameDraft} onChange={(e) => pickExistingSlot(e.target.value)} style={{ width: "100%", padding: "9px 10px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)", color: slotNameDraft ? "var(--text)" : "var(--text-muted)", fontSize: 13, marginBottom: 12 }}>
-              <option value="">Select a slot…</option>
+            <select value={slotNameDraft} onChange={(e) => pickExistingSlot(e.target.value)} style={{ width: "100%", padding: "9px 10px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)", color: slotNameDraft ? "var(--text)" : "var(--text-muted)", fontSize: 13, marginBottom: 8 }}>
+              <option value="">Select a body part…</option>
               {GLOBAL_SLOT_NAMES.map((name) => <option key={name} value={name}>{name}</option>)}
             </select>
           ) : (
@@ -1271,44 +1304,56 @@ function BuildPlanScreen({ existingPlans, onSave, onCancel }) {
               placeholder="Slot name (e.g. Chest — Upper)"
               value={slotNameDraft}
               onChange={(e) => setSlotNameDraft(e.target.value)}
-              style={{ width: "100%", padding: "9px 10px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13, marginBottom: 12 }}
+              style={{ width: "100%", padding: "9px 10px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13, marginBottom: 8 }}
             />
           )}
 
-          <div style={{ fontSize: 10.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700, marginBottom: 6 }}>Exercise</div>
-          <ModeToggle mode={exerciseEntryMode} onChange={(m) => { setExerciseEntryMode(m); setExerciseNameDraft(""); }} existingLabel="Choose Existing" manualLabel="Type My Own" />
-          {exerciseEntryMode === "existing" ? (
-            <select value={exerciseNameDraft} onChange={(e) => pickExistingExercise(e.target.value)} style={{ width: "100%", padding: "9px 10px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)", color: exerciseNameDraft ? "var(--text)" : "var(--text-muted)", fontSize: 13, marginBottom: 8 }}>
-              <option value="">Select an exercise…</option>
-              {exerciseChoicesForSlot.map((ex) => <option key={ex.name} value={ex.name}>{ex.name}</option>)}
-            </select>
+          {isKnownSlot ? (
+            <div style={{ fontSize: 11.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 10 }}>
+              {GLOBAL_SLOT_LIBRARY[slotNameDraft].length} exercises available for this body part — pick one on the day itself.
+            </div>
           ) : (
-            <>
-              <input
-                type="text"
-                placeholder="Exercise name"
-                value={exerciseNameDraft}
-                onChange={(e) => setExerciseNameDraft(e.target.value)}
-                style={{ width: "100%", padding: "9px 10px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13, marginBottom: 8 }}
-              />
-              <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-                <select value={exerciseTypeDraft} onChange={(e) => setExerciseTypeDraft(e.target.value)} style={{ flex: 1, padding: "9px 8px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}>
-                  <option value="reps">Reps</option>
-                  <option value="time">Timed</option>
-                </select>
-                <select value={exerciseEquipDraft} onChange={(e) => setExerciseEquipDraft(e.target.value)} style={{ flex: 1, padding: "9px 8px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}>
-                  {EQUIP_CHOICES.map((eq) => <option key={eq} value={eq}>{eq}</option>)}
-                </select>
-              </div>
-            </>
+            slotNameDraft.trim() && (
+              <>
+                <div style={{ fontSize: 10.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700, marginBottom: 6 }}>
+                  Seed Exercise (this slot name isn't in the library yet, so it needs at least one to start)
+                </div>
+                <ModeToggle mode={exerciseEntryMode} onChange={(m) => { setExerciseEntryMode(m); setExerciseNameDraft(""); }} existingLabel="Choose Existing" manualLabel="Type My Own" />
+                {exerciseEntryMode === "existing" ? (
+                  <select value={exerciseNameDraft} onChange={(e) => pickExistingExercise(e.target.value)} style={{ width: "100%", padding: "9px 10px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)", color: exerciseNameDraft ? "var(--text)" : "var(--text-muted)", fontSize: 13, marginBottom: 8 }}>
+                    <option value="">Select an exercise…</option>
+                    {exerciseChoicesForSlot.map((ex) => <option key={ex.name} value={ex.name}>{ex.name}</option>)}
+                  </select>
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      placeholder="Exercise name"
+                      value={exerciseNameDraft}
+                      onChange={(e) => setExerciseNameDraft(e.target.value)}
+                      style={{ width: "100%", padding: "9px 10px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13, marginBottom: 8 }}
+                    />
+                    <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                      <select value={exerciseTypeDraft} onChange={(e) => setExerciseTypeDraft(e.target.value)} style={{ flex: 1, padding: "9px 8px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}>
+                        <option value="reps">Reps</option>
+                        <option value="time">Timed</option>
+                      </select>
+                      <select value={exerciseEquipDraft} onChange={(e) => setExerciseEquipDraft(e.target.value)} style={{ flex: 1, padding: "9px 8px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}>
+                        {EQUIP_CHOICES.map((eq) => <option key={eq} value={eq}>{eq}</option>)}
+                      </select>
+                    </div>
+                  </>
+                )}
+              </>
+            )
           )}
 
           <button
             onClick={addScratchSlot}
-            disabled={!slotNameDraft.trim() || !exerciseNameDraft.trim()}
-            style={{ width: "100%", padding: "9px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: (!slotNameDraft.trim() || !exerciseNameDraft.trim()) ? "not-allowed" : "pointer", border: "1px solid var(--border)", background: "transparent", color: "var(--text)" }}
+            disabled={!canAddSlot}
+            style={{ width: "100%", padding: "9px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: !canAddSlot ? "not-allowed" : "pointer", border: "1px solid var(--border)", background: "transparent", color: "var(--text)" }}
           >
-            Add This Slot
+            Add This Body Part
           </button>
         </div>
         <button
@@ -1464,6 +1509,17 @@ export default function WorkoutTracker() {
   // (this week only). { [planId]: { [dayKey]: { added: [slotName,...], removed: [slotName,...] } } }
   const [planDayOverrides, setPlanDayOverrides] = useState({});
   const [planDayOverridesLoaded, setPlanDayOverridesLoaded] = useState(false);
+  // Which specific exercise was last logged for a given fixed slot on a
+  // given day — the default a slot pre-fills with once its week resets,
+  // instead of always falling back to the slot's first library entry, so a
+  // body-part-only day (see Build/Plan Editor) still "remembers" what you
+  // actually did last time. { [planId]: { [dayKey]: { [slotName]: exerciseName } } }
+  const [lastUsedExercise, setLastUsedExercise] = useState({});
+  const [lastUsedExerciseLoaded, setLastUsedExerciseLoaded] = useState(false);
+  // One overarching rep range (not per-exercise) — hitting its top end on a
+  // set is what triggers the "bump the weight" nudge, for any reps exercise.
+  // Set from the Split Builder hub; [min, max].
+  const [repRangeSetting, setRepRangeSetting] = useState([8, 12]);
   // A live (non-backfilled) day's completed workout, kept for reference/editing
   // in the Log tab through the rest of that calendar week: { [dayKey]: { weekKey,
   // sessionId, draft, customDraft, addedDraft } }. Re-saving while weekKey still
@@ -1539,6 +1595,45 @@ export default function WorkoutTracker() {
     loadPlanDayOverrides();
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadLastUsedExercise() {
+      try {
+        const res = await storage.get("last-used-exercise", false);
+        if (!cancelled && res && res.value) setLastUsedExercise(JSON.parse(res.value));
+      } catch (e) {
+        // nothing logged yet
+      } finally {
+        if (!cancelled) setLastUsedExerciseLoaded(true);
+      }
+    }
+    loadLastUsedExercise();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadRepRange() {
+      try {
+        const res = await storage.get("rep-range", false);
+        if (!cancelled && res && res.value) setRepRangeSetting(JSON.parse(res.value));
+      } catch (e) {
+        // use the default
+      }
+    }
+    loadRepRange();
+    return () => { cancelled = true; };
+  }, []);
+
+  function updateRepRange(index, value) {
+    const n = value === "" ? "" : Number(value);
+    setRepRangeSetting((prev) => {
+      const next = index === 0 ? [n, prev[1]] : [prev[0], n];
+      if (next[0] !== "" && next[1] !== "") storage.set("rep-range", JSON.stringify(next), false).catch(() => {});
+      return next;
+    });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -1844,9 +1939,17 @@ export default function WorkoutTracker() {
     });
   }
 
+  // Defaults to whatever exercise was last logged for this exact day+slot,
+  // if any, so a body-part-only slot "remembers" your last pick — falls
+  // back to the slot's first library entry only the very first time.
+  function defaultExerciseFor(slotName, avail) {
+    const remembered = lastUsedExercise[selectedPlanId]?.[day]?.[slotName];
+    return remembered && avail.some((e) => e.name === remembered) ? remembered : avail[0].name;
+  }
+
   function slotDraftOf(slotName) {
     const avail = getSlot(day, slotName).exercises;
-    return (draft[day] || {})[slotName] || { exercise: avail[0].name, notes: "", attachment: "", sets: [emptyRow()] };
+    return (draft[day] || {})[slotName] || { exercise: defaultExerciseFor(slotName, avail), notes: "", attachment: "", sets: [emptyRow()] };
   }
 
   function setExercise(slotName, exerciseName) {
@@ -2224,6 +2327,21 @@ export default function WorkoutTracker() {
           setWeekDrafts(updatedWeekDrafts);
           storage.set("week-drafts", JSON.stringify(updatedWeekDrafts), false).catch(() => {});
           dayLiveWeekKeyRef.current[day] = weekKeyFor(sessionDate);
+
+          // Remember which specific exercise was used for each fixed slot,
+          // so this same day defaults to it again once the next week resets
+          // — a live save only, not a backfill (a backdated entry shouldn't
+          // override the default for the day's most recent real occurrence).
+          const fixedBlocks = sessionBlocks.filter((b) => !b.custom && !b.addedFromPlan);
+          if (fixedBlocks.length > 0) {
+            const planLastUsed = { ...(lastUsedExercise[selectedPlanId] || {}) };
+            const dayLastUsed = { ...(planLastUsed[day] || {}) };
+            fixedBlocks.forEach((b) => { dayLastUsed[b.slot] = b.exercise; });
+            planLastUsed[day] = dayLastUsed;
+            const updatedLastUsed = { ...lastUsedExercise, [selectedPlanId]: planLastUsed };
+            setLastUsedExercise(updatedLastUsed);
+            storage.set("last-used-exercise", JSON.stringify(updatedLastUsed), false).catch(() => {});
+          }
         }
         setSavedFlash(true);
         setTimeout(() => setSavedFlash(false), 1800);
@@ -2451,19 +2569,33 @@ export default function WorkoutTracker() {
 
       <div style={{ position: "relative", zIndex: 1 }}>
       {screen === "home" && (
-        <HomeScreen plans={allPlans} activePlanId={selectedPlanId} onChoosePlan={choosePlan} onContinue={continueWithCurrentPlan} onStartBuild={startBuildPlan} />
+        <HomeScreen activePlan={activePlan} onContinue={continueWithCurrentPlan} onManageSplit={() => setScreen("splitBuilder")} />
+      )}
+
+      {screen === "splitBuilder" && (
+        <SplitBuilderScreen
+          plans={allPlans}
+          activePlanId={selectedPlanId}
+          onChoosePlan={choosePlan}
+          onStartBuild={startBuildPlan}
+          onOpenPlanEditor={openPlanEditor}
+          onOpenSchedule={openScheduleEditor}
+          onBack={goToHome}
+          repRange={repRangeSetting}
+          onRepRangeChange={updateRepRange}
+        />
       )}
 
       {screen === "buildPlan" && (
-        <BuildPlanScreen existingPlans={allPlans} onSave={saveCustomPlan} onCancel={goToHome} />
+        <BuildPlanScreen existingPlans={allPlans} onSave={saveCustomPlan} onCancel={() => setScreen("splitBuilder")} />
       )}
 
       {screen === "schedule" && activePlan && scheduleDraft && (
-        <ScheduleScreen plan={activePlan} schedule={scheduleDraft} onSave={saveSchedule} onBack={goToHome} />
+        <ScheduleScreen plan={activePlan} schedule={scheduleDraft} onSave={saveSchedule} onBack={() => setScreen("splitBuilder")} />
       )}
 
       {screen === "planEditor" && activePlan && (
-        <PlanEditorScreen plan={activePlan} effectiveDays={workoutData} onToggleSlot={togglePermanentSlot} onBack={() => setScreen("app")} />
+        <PlanEditorScreen plan={activePlan} effectiveDays={workoutData} onToggleSlot={togglePermanentSlot} onBack={() => setScreen("splitBuilder")} />
       )}
 
       {screen === "addPastWorkout" && activePlan && (
@@ -2482,12 +2614,6 @@ export default function WorkoutTracker() {
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <button onClick={goToHome} title="Change plan" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)", cursor: "pointer" }}>
               <HomeIcon size={15} color="var(--text-muted)" />
-            </button>
-            <button onClick={openScheduleEditor} title="Assign days of the week" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)", cursor: "pointer" }}>
-              <CalendarIcon size={15} color="var(--text-muted)" />
-            </button>
-            <button onClick={openPlanEditor} title="Edit plan days" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)", cursor: "pointer" }}>
-              <Pencil size={14} color="var(--text-muted)" />
             </button>
             <div style={{ display: "flex", gap: 4, background: "var(--surface)", padding: 3, borderRadius: 10, border: "1px solid var(--border)" }}>
               <button onClick={() => setView("log")} style={{ padding: "6px 12px", borderRadius: 7, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: view === "log" ? "var(--accent)" : "transparent", color: view === "log" ? "var(--on-accent)" : "var(--text-muted)" }}>
@@ -2566,7 +2692,7 @@ export default function WorkoutTracker() {
             const equip = getExerciseEquip(day, slot.name, sd.exercise);
             const count = countForSlot(slot.name);
             const prevBest = getPreviousBest(sd.exercise);
-            const repRange = getRepRange(sd.exercise);
+            const repRange = repRangeSetting;
             const shouldBumpWeight = prevBest && prevBest.type === "reps" && repRange && prevBest.value >= repRange[1];
             return (
               <div key={slot.name} style={{ marginBottom: 10, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
@@ -2686,16 +2812,13 @@ export default function WorkoutTracker() {
                                 <Timer size={12} color="var(--time)" style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
                               </div>
                             ) : (
-                              <select
+                              <input
+                                type="number" inputMode="numeric"
+                                placeholder="Reps"
                                 value={row.value}
                                 onChange={(e) => updateRow(slot.name, i, "value", e.target.value)}
-                                style={{ flex: 1, minWidth: 0, padding: "9px 6px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", color: row.value === "" ? "var(--text-muted)" : "var(--text)", fontSize: 13 }}
-                              >
-                                <option value="">Reps</option>
-                                {REPS_OPTIONS.map((r) => (
-                                  <option key={r} value={r}>{r}</option>
-                                ))}
-                              </select>
+                                style={{ flex: 1, minWidth: 0, padding: "9px 6px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13 }}
+                              />
                             )}
 
                             <button onClick={() => removeRow(slot.name, i)} disabled={sd.sets.length === 1} style={{ background: "none", border: "none", cursor: sd.sets.length === 1 ? "default" : "pointer", padding: 4, opacity: sd.sets.length === 1 ? 0.25 : 1, flexShrink: 0 }}>
@@ -2735,16 +2858,13 @@ export default function WorkoutTracker() {
                                   onChange={(e) => updateExtra(slot.name, i, "weight", e.target.value)}
                                   style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
                                 />
-                                <select
+                                <input
+                                  type="number" inputMode="numeric"
+                                  placeholder="Reps"
                                   value={row.extra.value}
                                   onChange={(e) => updateExtra(slot.name, i, "value", e.target.value)}
-                                  style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: row.extra.value === "" ? "var(--text-muted)" : "var(--text)", fontSize: 12.5 }}
-                                >
-                                  <option value="">Reps</option>
-                                  {REPS_OPTIONS.map((r) => (
-                                    <option key={r} value={r}>{r}</option>
-                                  ))}
-                                </select>
+                                  style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
+                                />
                               </div>
                             </div>
                           ) : (
@@ -2791,7 +2911,7 @@ export default function WorkoutTracker() {
             const equip = exObj?.equip || "Dumbbell";
             const filledCount = entry.sets.filter((s) => (type === "time" ? s.value !== "" : s.weight !== "" && s.value !== "")).length;
             const prevBest = getPreviousBest(entry.exercise);
-            const repRange = getRepRange(entry.exercise);
+            const repRange = repRangeSetting;
             const shouldBumpWeight = prevBest && prevBest.type === "reps" && repRange && prevBest.value >= repRange[1];
             const muscleStatus = getMuscleStatus(entry.exercise);
             const detail = MUSCLE_MAP[entry.exercise]?.detail;
@@ -2910,16 +3030,13 @@ export default function WorkoutTracker() {
                                 <Timer size={12} color="var(--time)" style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
                               </div>
                             ) : (
-                              <select
+                              <input
+                                type="number" inputMode="numeric"
+                                placeholder="Reps"
                                 value={row.value}
                                 onChange={(e) => updateAddedRow(entry.id, i, "value", e.target.value)}
-                                style={{ flex: 1, minWidth: 0, padding: "9px 6px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", color: row.value === "" ? "var(--text-muted)" : "var(--text)", fontSize: 13 }}
-                              >
-                                <option value="">Reps</option>
-                                {REPS_OPTIONS.map((r) => (
-                                  <option key={r} value={r}>{r}</option>
-                                ))}
-                              </select>
+                                style={{ flex: 1, minWidth: 0, padding: "9px 6px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13 }}
+                              />
                             )}
 
                             <button onClick={() => removeAddedRow(entry.id, i)} disabled={entry.sets.length === 1} style={{ background: "none", border: "none", cursor: entry.sets.length === 1 ? "default" : "pointer", padding: 4, opacity: entry.sets.length === 1 ? 0.25 : 1, flexShrink: 0 }}>
@@ -2959,16 +3076,13 @@ export default function WorkoutTracker() {
                                   onChange={(e) => updateAddedExtra(entry.id, i, "weight", e.target.value)}
                                   style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
                                 />
-                                <select
+                                <input
+                                  type="number" inputMode="numeric"
+                                  placeholder="Reps"
                                   value={row.extra.value}
                                   onChange={(e) => updateAddedExtra(entry.id, i, "value", e.target.value)}
-                                  style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: row.extra.value === "" ? "var(--text-muted)" : "var(--text)", fontSize: 12.5 }}
-                                >
-                                  <option value="">Reps</option>
-                                  {REPS_OPTIONS.map((r) => (
-                                    <option key={r} value={r}>{r}</option>
-                                  ))}
-                                </select>
+                                  style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
+                                />
                               </div>
                             </div>
                           ) : (
@@ -3111,16 +3225,13 @@ export default function WorkoutTracker() {
                                   onChange={(e) => updateCustomExtra(entry.id, i, "weight", e.target.value)}
                                   style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
                                 />
-                                <select
+                                <input
+                                  type="number" inputMode="numeric"
+                                  placeholder="Reps"
                                   value={row.extra.value}
                                   onChange={(e) => updateCustomExtra(entry.id, i, "value", e.target.value)}
-                                  style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: row.extra.value === "" ? "var(--text-muted)" : "var(--text)", fontSize: 12.5 }}
-                                >
-                                  <option value="">Reps</option>
-                                  {REPS_OPTIONS.map((r) => (
-                                    <option key={r} value={r}>{r}</option>
-                                  ))}
-                                </select>
+                                  style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
+                                />
                               </div>
                             </div>
                           ) : (
@@ -3348,16 +3459,13 @@ export default function WorkoutTracker() {
                                             style={{ flex: 1, minWidth: 0, padding: "8px 6px", borderRadius: 7, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13 }}
                                           />
                                         ) : (
-                                          <select
+                                          <input
+                                            type="number" inputMode="numeric"
+                                            placeholder="Reps"
                                             value={st.value}
                                             onChange={(e) => updateEditSetField(bi, si, "value", e.target.value)}
-                                            style={{ flex: 1, minWidth: 0, padding: "8px 6px", borderRadius: 7, background: "var(--surface)", border: "1px solid var(--border)", color: st.value === "" ? "var(--text-muted)" : "var(--text)", fontSize: 13 }}
-                                          >
-                                            <option value="">Reps</option>
-                                            {REPS_OPTIONS.map((r) => (
-                                              <option key={r} value={r}>{r}</option>
-                                            ))}
-                                          </select>
+                                            style={{ flex: 1, minWidth: 0, padding: "8px 6px", borderRadius: 7, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13 }}
+                                          />
                                         )}
                                         <button onClick={() => removeEditSet(bi, si)} disabled={b.sets.length === 1} style={{ background: "none", border: "none", cursor: b.sets.length === 1 ? "default" : "pointer", padding: 4, opacity: b.sets.length === 1 ? 0.25 : 1, flexShrink: 0 }}>
                                           <X size={14} color="var(--text-muted)" />
@@ -3389,16 +3497,13 @@ export default function WorkoutTracker() {
                                               onChange={(e) => updateEditExtraField(bi, si, "weight", e.target.value)}
                                               style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
                                             />
-                                            <select
+                                            <input
+                                              type="number" inputMode="numeric"
+                                              placeholder="Reps"
                                               value={st.extra.value}
                                               onChange={(e) => updateEditExtraField(bi, si, "value", e.target.value)}
-                                              style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: st.extra.value === "" ? "var(--text-muted)" : "var(--text)", fontSize: 12.5 }}
-                                            >
-                                              <option value="">Reps</option>
-                                              {REPS_OPTIONS.map((r) => (
-                                                <option key={r} value={r}>{r}</option>
-                                              ))}
-                                            </select>
+                                              style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
+                                            />
                                           </div>
                                         </div>
                                       ) : (
