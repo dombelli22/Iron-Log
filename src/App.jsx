@@ -1167,6 +1167,51 @@ function HomeScreen({ activePlan, profile, onContinue, onManageSplit, onOpenProf
 // plus the overarching rep-range setting; the existing choose/build tools
 // (quiz, browse, build-from-scratch) hang off the same hub underneath.
 // ---------------------------------------------------------------------------
+// Everything Iron Log keeps on this device, as one JSON file. Uses the share
+// sheet where available (iOS home-screen apps can't reliably download a blob
+// link, but can "Save to Files" from the share sheet), else a normal download.
+async function downloadBackup() {
+  const data = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith("ironlog:") && k !== "ironlog:sync-meta") data[k.slice(8)] = localStorage.getItem(k);
+  }
+  const json = JSON.stringify({ app: "iron-log", exportedAt: new Date().toISOString(), data }, null, 2);
+  const name = `iron-log-backup-${todayISO()}.json`;
+  const file = new File([json], name, { type: "application/json" });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: name }); return "shared"; } catch (e) { if (e && e.name === "AbortError") return "cancelled"; }
+  }
+  const url = URL.createObjectURL(file);
+  const a = document.createElement("a");
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  return "downloaded";
+}
+
+function BackupCard() {
+  const [msg, setMsg] = useState("");
+  async function backup() {
+    try {
+      const r = await downloadBackup();
+      setMsg(r === "cancelled" ? "" : r === "shared" ? "Backup ready — choose \"Save to Files\" to keep it." : "Backup downloaded.");
+    } catch (e) { setMsg("Couldn't create the backup. Try again."); }
+  }
+  return (
+    <>
+      <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700, margin: "24px 0 10px" }}>Backup</div>
+      <div style={{ padding: "14px 16px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)" }}>
+        <div style={{ fontSize: 11.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 12 }}>
+          Save a copy of all your workouts, plans and settings from this device as a file.
+        </div>
+        <button onClick={backup} style={{ ...homeChoiceButtonStyle, padding: "11px", textAlign: "center", fontSize: 13, fontWeight: 600 }}>Download Backup</button>
+        {msg && <div style={{ fontSize: 12.5, marginTop: 10, color: "var(--text)" }}>{msg}</div>}
+      </div>
+    </>
+  );
+}
+
 function SplitBuilderScreen({ plans, activePlanId, onChoosePlan, onStartBuild, onOpenPlanEditor, onOpenSchedule, onBack, repRange, onRepRangeChange }) {
   const activePlan = plans.find((p) => p.id === activePlanId);
   // landing -> quizDays -> [quizStyle] -> recommend, or landing -> browse
@@ -1399,6 +1444,8 @@ function SplitBuilderScreen({ plans, activePlanId, onChoosePlan, onStartBuild, o
           <span style={{ color: "var(--text-muted)", fontSize: 13 }}>reps</span>
         </div>
       </div>
+
+      <BackupCard />
     </div>
   );
 }
