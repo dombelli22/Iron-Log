@@ -708,6 +708,11 @@ function recommendPlanId({ days, fiveDayStyle, sixDayStyle }) {
   return "original";
 }
 
+// Full-screen "‹ Back" links. Generous padding makes them easy to hit on a
+// phone (they used to be bare 12px text with zero padding); the negative
+// bottom margin keeps the visual spacing below them the same as before.
+const backLinkStyle = { background: "none", border: "none", cursor: "pointer", padding: "12px 20px 12px 0", margin: "-12px 0 4px", color: "var(--text-muted)", fontSize: 13, minHeight: 44 };
+
 const homeChoiceButtonStyle = {
   width: "100%", textAlign: "left", padding: "14px", borderRadius: 12, cursor: "pointer",
   background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)",
@@ -793,7 +798,7 @@ function SplitBuilderScreen({ plans, activePlanId, onChoosePlan, onStartBuild, o
 
   function BackButton({ onClick }) {
     return (
-      <button onClick={onClick} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: 16, color: "var(--text-muted)", fontSize: 12 }}>
+      <button onClick={onClick} style={backLinkStyle}>
         ‹ Back
       </button>
     );
@@ -1019,7 +1024,7 @@ function ScheduleScreen({ plan, schedule, onSave, onBack }) {
 
   return (
     <div style={{ padding: "calc(24px + env(safe-area-inset-top)) 16px calc(60px + env(safe-area-inset-bottom))", maxWidth: 520, margin: "0 auto" }}>
-      <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: 16, color: "var(--text-muted)", fontSize: 12 }}>
+      <button onClick={onBack} style={backLinkStyle}>
         ‹ Back to Plans
       </button>
       <div className="display" style={{ fontSize: 18, marginBottom: 4 }}>Assign Your Schedule</div>
@@ -1069,7 +1074,7 @@ function AddPastWorkoutSetup({ plan, onStart, onBack }) {
 
   return (
     <div style={{ padding: "calc(24px + env(safe-area-inset-top)) 16px calc(60px + env(safe-area-inset-bottom))", maxWidth: 520, margin: "0 auto" }}>
-      <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: 16, color: "var(--text-muted)", fontSize: 12 }}>
+      <button onClick={onBack} style={backLinkStyle}>
         ‹ Back to History
       </button>
       <div className="display" style={{ fontSize: 18, marginBottom: 4 }}>Add a Past Workout</div>
@@ -1351,7 +1356,7 @@ function BuildPlanScreen({ existingPlans, onSave, onCancel }) {
 
   function BackButton({ onClick }) {
     return (
-      <button onClick={onClick} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: 16, color: "var(--text-muted)", fontSize: 12 }}>
+      <button onClick={onClick} style={backLinkStyle}>
         ‹ Back
       </button>
     );
@@ -1661,7 +1666,7 @@ function PlanEditorScreen({ plan, effectiveDays, onAddSlot, onRemoveSlot, onSubt
 
   return (
     <div style={{ padding: "calc(24px + env(safe-area-inset-top)) 16px calc(60px + env(safe-area-inset-bottom))", maxWidth: 520, margin: "0 auto", boxSizing: "border-box" }}>
-      <button onClick={onBack} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 12, cursor: "pointer", padding: 0, marginBottom: 16 }}>‹ Back</button>
+      <button onClick={onBack} style={backLinkStyle}>‹ Back</button>
       <div className="display" style={{ fontSize: 18, marginBottom: 4 }}>Edit Plan Days</div>
       <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 20, lineHeight: 1.5 }}>
         Permanently add or remove a body-part slot from a day, or rename its subtitle — it repeats every week until you change it again here. You can add the same body part more than once per day. For a one-off skip just for this week, use the trash icon on a slot while logging instead.
@@ -1728,7 +1733,7 @@ function PlanEditorScreen({ plan, effectiveDays, onAddSlot, onRemoveSlot, onSubt
                 {flowHere && flowHere.step === "slot" && (
                   <div style={{ marginTop: 4 }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                      <button onClick={() => setAddFlow({ dayKey, step: "bodyPart" })} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 11, cursor: "pointer", padding: 0 }}>‹ Back</button>
+                      <button onClick={() => setAddFlow({ dayKey, step: "bodyPart" })} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 13, cursor: "pointer", padding: "10px 16px 10px 0", minHeight: 40 }}>‹ Back</button>
                       <button onClick={() => setAddFlow(null)} style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}><X size={14} color="var(--text-muted)" /></button>
                     </div>
                     {(GENERIC_BODY_PARTS[flowHere.bodyPart] || []).map((slotName) => {
@@ -3556,7 +3561,7 @@ export default function WorkoutTracker() {
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   {addFlow.step !== "choose" && (
-                    <button onClick={addFlowBack} style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "var(--text-muted)", fontSize: 12 }}>‹ Back</button>
+                    <button onClick={addFlowBack} style={{ background: "none", border: "none", cursor: "pointer", padding: "10px 16px 10px 0", minHeight: 40, color: "var(--text-muted)", fontSize: 13 }}>‹ Back</button>
                   )}
                   <span className="display" style={{ fontSize: 12, color: "var(--text-muted)" }}>
                     {addFlow.step === "choose" && "Add an exercise"}

@@ -1,3 +1,28 @@
+/* Size every element by its border box. Without this, any input/textarea
+   set to width:100% plus padding is wider than its container, which makes
+   phone screens horizontally scrollable. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* iOS Safari zooms into any text field under 16px on focus and never zooms
+   back out, leaving the page too wide for the screen. Keep fields at 16px on
+   touch devices (inline sizes elsewhere are overridden on purpose). */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
 html,
 body {
   margin: 0;

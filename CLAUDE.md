@@ -802,6 +802,23 @@ form that's silently no longer backed by any history record.
   (`homeChoiceButtonStyle`). Buttons that go from disabled to active also
   toggle the shadow with the color (see `ScheduleScreen`'s Save & Continue or
   `BuildPlanScreen`'s Next/Save & Finish) so a disabled button doesn't glow.
+- **Phone-fit rules (in `src/index.css`, apply app-wide).** Two global rules
+  exist because both bit real phone use: (1) `*, *::before, *::after {
+  box-sizing: border-box }` — without it every `width: 100%` input/textarea
+  with padding was wider than its container (the Log tab's notes box visibly
+  ran off the right edge), making screens horizontally scrollable; and (2)
+  under `@media (pointer: coarse)`, `input/select/textarea` are forced to
+  `font-size: 16px !important` — iOS Safari zooms into any field under 16px
+  on focus and never zooms back out, leaving the page too wide for the
+  screen and the Back button off-screen. That `!important` deliberately
+  overrides the smaller inline font sizes on fields; don't "fix" it. Every
+  full-screen "‹ Back" link shares `backLinkStyle` (44px-tall tap target;
+  it used to be bare 12px text with zero padding), and full-screen pages
+  follow the shared shell padding (`calc(24px + env(safe-area-inset-top))
+  16px calc(60px + env(safe-area-inset-bottom))`, `maxWidth: 520`) so
+  nothing sits under the notch/home bar. The dev-browser check that catches
+  regressions: emulate 375px wide, walk every screen, and flag any
+  non-fixed element whose bounding box extends past `innerWidth`.
 - The Log tab's volume/hold-time numbers count up (`useCountUp`, `App.jsx`)
   from their previous value to the new one over 500ms (ease-out cubic) any
   time the underlying total changes, rather than snapping instantly — pairs
