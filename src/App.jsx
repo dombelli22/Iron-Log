@@ -1660,9 +1660,9 @@ function PlanEditorScreen({ plan, effectiveDays, onAddSlot, onRemoveSlot, onSubt
   const dayKeys = Object.keys(plan.days);
 
   return (
-    <div style={{ padding: "20px 20px 40px" }}>
-      <button onClick={onBack} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 13, cursor: "pointer", padding: 0, marginBottom: 14 }}>‹ Back</button>
-      <div className="display" style={{ fontSize: 20, marginBottom: 4 }}>EDIT PLAN DAYS</div>
+    <div style={{ padding: "calc(24px + env(safe-area-inset-top)) 16px calc(60px + env(safe-area-inset-bottom))", maxWidth: 520, margin: "0 auto", boxSizing: "border-box" }}>
+      <button onClick={onBack} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 12, cursor: "pointer", padding: 0, marginBottom: 16 }}>‹ Back</button>
+      <div className="display" style={{ fontSize: 18, marginBottom: 4 }}>Edit Plan Days</div>
       <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 20, lineHeight: 1.5 }}>
         Permanently add or remove a body-part slot from a day, or rename its subtitle — it repeats every week until you change it again here. You can add the same body part more than once per day. For a one-off skip just for this week, use the trash icon on a slot while logging instead.
       </div>
@@ -1676,11 +1676,11 @@ function PlanEditorScreen({ plan, effectiveDays, onAddSlot, onRemoveSlot, onSubt
         return (
           <div key={dayKey} style={{ marginBottom: 10, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
             <button onClick={() => { setOpenDay(isOpen ? null : dayKey); setAddFlow(null); }} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 14px", background: "transparent", border: "none", cursor: "pointer", color: "var(--text)" }}>
-              <div style={{ textAlign: "left" }}>
+              <div style={{ textAlign: "left", minWidth: 0, flex: 1, paddingRight: 10 }}>
                 <div style={{ fontSize: 14, fontWeight: 700 }}>{day.tab}</div>
-                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{effectiveSubtitle || "No subtitle"}</div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", overflowWrap: "anywhere" }}>{effectiveSubtitle || "No subtitle"}</div>
               </div>
-              <ChevronDown size={16} color="var(--text-muted)" style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+              <ChevronDown size={16} color="var(--text-muted)" style={{ flexShrink: 0, transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
             </button>
             {isOpen && (
               <div style={{ padding: "0 14px 14px" }}>
@@ -1695,8 +1695,8 @@ function PlanEditorScreen({ plan, effectiveDays, onAddSlot, onRemoveSlot, onSubt
                 <div style={{ fontSize: 10.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700, marginBottom: 6 }}>Body Parts</div>
                 {effectiveSlots.map((slot) => (
                   <div key={slot.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 10px", marginBottom: 6, borderRadius: 8, background: "var(--surface-2)" }}>
-                    <span style={{ fontSize: 13 }}>{slot.label}</span>
-                    <button onClick={() => onRemoveSlot(dayKey, slot)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+                    <span style={{ fontSize: 13, minWidth: 0, overflowWrap: "anywhere" }}>{slot.label}</span>
+                    <button onClick={() => onRemoveSlot(dayKey, slot)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, flexShrink: 0 }}>
                       <Trash2 size={14} color="var(--text-muted)" />
                     </button>
                   </div>
