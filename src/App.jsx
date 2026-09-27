@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { Dumbbell, Plus, Trash2, ChevronDown, Save, X, Loader2, History as HistoryIcon, RotateCcw, Timer, TrendingUp, Layers, Home as HomeIcon, Pencil, User as UserIcon } from "lucide-react";
 import { storage } from "./storage";
-import { getMyAccount, saveMyAccount, searchPeople, getPublicProfile, getFollowCounts, getFollowStatus, follow, unfollow, getPendingRequests, approveRequest, declineRequest, fetchUserWorkouts, fetchHomeFeed, friendlySocialError, USERNAME_RE } from "./social";
-import { useCloud, sync, signIn, signUp, signOut, resetPassword, setNewPassword, dismissRecovery } from "./cloud";
+import { getMyAccount, saveMyAccount, searchPeople, getPublicProfile, getFollowCounts, getFollowStatus, follow, unfollow, getPendingRequests, approveRequest, declineRequest, fetchUserWorkouts, fetchHomeFeed, friendlySocialError, USERNAME_RE, REPORT_REASONS, getBlockedIds, getBlockedProfiles, blockUser, unblockUser, reportUser } from "./social";
+import { CONTACT_EMAIL } from "./appConfig";
+import { useCloud, sync, signIn, signUp, signOut, resetPassword, setNewPassword, dismissRecovery, deleteAccount } from "./cloud";
 import { PLAN_LIBRARY, ALL_DAYS_BY_KEY, WEEKDAYS, getScheduledDay, GLOBAL_SLOT_LIBRARY, GLOBAL_SLOT_NAMES, GLOBAL_EXERCISE_LIST, GENERIC_BODY_PARTS } from "./plans";
 import BodyModel from "react-body-highlighter";
 
@@ -948,7 +950,167 @@ function SetPasswordScreen() {
   );
 }
 
-function AccountScreen({ onBack, profile }) {
+// ---------------------------------------------------------------------------
+// Safety: report sheet, blocked-accounts list, delete-account, legal pages.
+// ---------------------------------------------------------------------------
+function ReportSheet({ label, onClose, onSubmit }) {
+  const [reason, setReason] = useState("");
+  const [details, setDetails] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState("");
+  async function submit() {
+    setBusy(true); setError("");
+    try { await onSubmit(reason, details.trim()); setDone(true); }
+    catch (e) { setError(friendlySocialError(e)); }
+    setBusy(false);
+  }
+  return createPortal(
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 90, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 520, maxHeight: "88vh", overflowY: "auto", background: "var(--surface)", borderTop: "1px solid var(--border)", borderRadius: "16px 16px 0 0", padding: "18px 16px calc(24px + env(safe-area-inset-bottom))" }}>
+        {done ? (
+          <>
+            <div className="display" style={{ fontSize: 16, marginBottom: 8 }}>Report sent</div>
+            <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 16 }}>Thanks for letting us know. If you don't want to see {label} again, you can also block them from their profile.</div>
+            <button onClick={onClose} style={{ ...homeChoiceButtonStyle, padding: "12px", textAlign: "center", fontSize: 13.5, fontWeight: 700 }}>Done</button>
+          </>
+        ) : (
+          <>
+            <div className="display" style={{ fontSize: 16, marginBottom: 4 }}>Report {label}</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14 }}>They won't be told who reported them.</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+              {REPORT_REASONS.map(([key, text]) => (
+                <button key={key} onClick={() => setReason(key)} style={{ textAlign: "left", padding: "11px 12px", borderRadius: 10, cursor: "pointer", fontSize: 13.5, border: reason === key ? "1px solid var(--accent)" : "1px solid var(--border)", background: reason === key ? "var(--accent-dim)" : "var(--surface-2)", color: "var(--text)" }}>{text}</button>
+              ))}
+            </div>
+            <textarea rows={3} maxLength={500} value={details} onChange={(e) => setDetails(e.target.value)} placeholder="Anything else we should know? (optional)"
+              style={{ width: "100%", padding: "10px 12px", borderRadius: 10, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 14, lineHeight: 1.4, marginBottom: 12 }} />
+            {error && <div style={{ fontSize: 12.5, color: "var(--danger)", marginBottom: 10 }}>{error}</div>}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={onClose} style={{ flex: 1, padding: "12px", borderRadius: 10, fontSize: 13.5, fontWeight: 600, cursor: "pointer", border: "1px solid var(--border)", background: "transparent", color: "var(--text-muted)" }}>Cancel</button>
+              <button onClick={submit} disabled={!reason || busy} style={{ flex: 1, padding: "12px", borderRadius: 10, fontSize: 13.5, fontWeight: 700, border: "none", cursor: reason && !busy ? "pointer" : "not-allowed", background: reason && !busy ? "var(--accent)" : "var(--surface-2)", color: reason && !busy ? "var(--on-accent)" : "var(--text-muted)" }}>{busy ? "Sending…" : "Send Report"}</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function BlockedList({ userId }) {
+  const [people, setPeople] = useState(undefined);
+  const [error, setError] = useState("");
+  useEffect(() => { getBlockedProfiles(userId).then(setPeople).catch((e) => { setPeople([]); setError(friendlySocialError(e)); }); }, [userId]);
+  async function unblock(p) {
+    try { await unblockUser(userId, p.id); setPeople((prev) => prev.filter((x) => x.id !== p.id)); }
+    catch (e) { setError(friendlySocialError(e)); }
+  }
+  if (!people || people.length === 0) return error ? <div style={{ fontSize: 12.5, color: "var(--danger)", marginTop: 20 }}>{error}</div> : null;
+  return (
+    <div style={{ marginTop: 28, paddingTop: 20, borderTop: "1px solid var(--border)" }}>
+      <div style={socialLabel}>Blocked Accounts</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {people.map((p) => <PersonRow key={p.id} person={p} onOpen={() => {}} right={<button onClick={() => unblock(p)} style={smallBtn(false)}>Unblock</button>} />)}
+      </div>
+      {error && <div style={{ fontSize: 12.5, color: "var(--danger)", marginTop: 8 }}>{error}</div>}
+    </div>
+  );
+}
+
+function DeleteAccountSection({ email, onDeleted }) {
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function go() {
+    setBusy(true); setError("");
+    try { await deleteAccount(); onDeleted(); }
+    catch (e) { setError(friendlySocialError(e)); setBusy(false); }
+  }
+  const ok = typed.trim().toUpperCase() === "DELETE" && !busy;
+  return (
+    <div style={{ marginTop: 28, paddingTop: 20, borderTop: "1px solid var(--border)" }}>
+      <div style={socialLabel}>Delete Account</div>
+      {!open ? (
+        <>
+          <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 12 }}>Permanently remove your account and everything stored for it online. The workouts on this device stay on this device.</div>
+          <button onClick={() => setOpen(true)} style={{ ...homeChoiceButtonStyle, padding: "11px", textAlign: "center", fontSize: 13, fontWeight: 600, color: "var(--danger)" }}>Delete My Account…</button>
+        </>
+      ) : (
+        <div style={{ padding: "14px", borderRadius: 12, border: "1px solid var(--danger)", background: "var(--surface)" }}>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>This can't be undone</div>
+          <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 12 }}>
+            {email} will be deleted along with your online profile, workouts, plans, followers, and blocks. Other devices signed in to it will lose access. Type DELETE to confirm.
+          </div>
+          <input type="text" value={typed} onChange={(e) => setTyped(e.target.value)} autoCapitalize="characters" autoCorrect="off" placeholder="DELETE"
+            style={{ width: "100%", padding: "11px 12px", borderRadius: 10, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 14, marginBottom: 12 }} />
+          {error && <div style={{ fontSize: 12.5, color: "var(--danger)", marginBottom: 10 }}>{error}</div>}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => { setOpen(false); setTyped(""); }} style={{ flex: 1, padding: "11px", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "1px solid var(--border)", background: "transparent", color: "var(--text-muted)" }}>Cancel</button>
+            <button onClick={go} disabled={!ok} style={{ flex: 1, padding: "11px", borderRadius: 10, fontSize: 13, fontWeight: 700, border: "none", cursor: ok ? "pointer" : "not-allowed", background: ok ? "var(--danger)" : "var(--surface-2)", color: ok ? "#fff" : "var(--text-muted)" }}>{busy ? "Deleting…" : "Delete Forever"}</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const LEGAL_UPDATED = "September 26, 2026";
+function LegalScreen({ initial, onBack }) {
+  const [tab, setTab] = useState(initial || "terms");
+  const h = { fontSize: 14, fontWeight: 700, margin: "18px 0 6px" };
+  const p = { fontSize: 13, lineHeight: 1.6, color: "var(--text)", margin: "0 0 8px" };
+  const contact = CONTACT_EMAIL ? <>You can reach us at <span style={{ fontWeight: 600 }}>{CONTACT_EMAIL}</span>.</> : <>Contact the person who gave you this app.</>;
+  return (
+    <div style={socialShell}>
+      <button onClick={onBack} style={backLinkStyle}>‹ Back</button>
+      <div style={{ display: "flex", gap: 4, background: "var(--surface)", padding: 3, borderRadius: 10, border: "1px solid var(--border)", marginBottom: 14 }}>
+        {[["terms", "Terms of Use"], ["privacy", "Privacy Policy"]].map(([k, label]) => (
+          <button key={k} onClick={() => setTab(k)} style={{ flex: 1, padding: "8px", borderRadius: 7, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: tab === k ? "var(--accent)" : "transparent", color: tab === k ? "var(--on-accent)" : "var(--text-muted)" }}>{label}</button>
+        ))}
+      </div>
+      <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginBottom: 6 }}>Last updated {LEGAL_UPDATED}</div>
+      {tab === "terms" ? (
+        <>
+          <div style={h}>Using Iron Log</div>
+          <p style={p}>Iron Log is a workout tracker. You can use it without an account. If you create an account you can back up your data, follow other people and share workouts. You must be at least 13 years old to create an account.</p>
+          <div style={h}>Your content</div>
+          <p style={p}>What you log stays yours. If you turn on sharing, you're choosing to let the people your privacy settings allow (your followers, or anyone if your account is public) see your workouts, name, photo, bio and goal. You can turn sharing off, change privacy, or delete your account at any time.</p>
+          <div style={h}>Be decent</div>
+          <p style={p}>Don't harass or threaten others, impersonate people, post spam, or share anything unlawful or sexually explicit in names, bios, photos or notes. Don't try to break, overload or scrape the service or get into other people's data.</p>
+          <div style={h}>Reports, blocking and removal</div>
+          <p style={p}>You can report and block accounts. We may remove content or suspend accounts that break these terms, or for safety.</p>
+          <div style={h}>Not medical advice</div>
+          <p style={p}>Iron Log is a logging tool, not medical or coaching advice. Exercise carries risk; check with a professional if unsure, and stop if something hurts.</p>
+          <div style={h}>No guarantees</div>
+          <p style={p}>The app is provided as is, without warranties. We do our best to keep your data safe and the service running but can't promise it will always be available or error free, so keep your own backup (Split Builder → Download Backup). To the extent the law allows, we aren't liable for lost data or indirect losses.</p>
+          <div style={h}>Changes and contact</div>
+          <p style={p}>We may update these terms; continuing to use the app after a change means you accept it. {contact}</p>
+        </>
+      ) : (
+        <>
+          <div style={h}>What we collect</div>
+          <p style={p}>Without an account, everything stays on your device and we collect nothing. With an account we store: your email and a hashed password; your profile (display name, username, bio, goal, photo); your workouts; your plans, schedule and settings; who you follow, block, and follow-requests; and any reports you file.</p>
+          <div style={h}>Who can see it</div>
+          <p style={p}>Your workouts, profile and settings are private to you by default. Only if you choose a username and turn on "Share my workouts" can others see your name, photo, bio, goal and workouts — your followers if your account is private, or any signed-in user if it's public. Your email is never shown to other people, and blocked accounts can't see you.</p>
+          <div style={h}>How it's stored</div>
+          <p style={p}>Account data is stored with our hosting provider, Supabase, on cloud servers, and the app is hosted on GitHub Pages. We use this data only to run the app. We don't sell it or use it for advertising.</p>
+          <div style={h}>Your choices</div>
+          <p style={p}>You can edit your profile, change privacy, or stop sharing at any time. Account & Sync → Delete My Account permanently removes your account and everything stored online for it. Copies on your own devices are not affected; delete the app's data in your browser or phone to remove them.</p>
+          <div style={h}>Security</div>
+          <p style={p}>Data is transmitted over encrypted connections and protected by per-account access rules, but no system is perfectly secure. Use a strong, unique password.</p>
+          <div style={h}>Children</div>
+          <p style={p}>Accounts are for people 13 and older. If you believe a child has made an account, contact us and we'll remove it.</p>
+          <div style={h}>Changes and contact</div>
+          <p style={p}>We'll update this page if our practices change. {contact}</p>
+        </>
+      )}
+    </div>
+  );
+}
+
+function AccountScreen({ onBack, profile, onOpenLegal, onDeleted }) {
   const cloud = useCloud();
   const [mode, setMode] = useState("signIn"); // signIn | signUp | reset
   const [email, setEmail] = useState("");
@@ -1024,6 +1186,14 @@ function AccountScreen({ onBack, profile }) {
         <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 16 }}>
           {mode === "signUp" ? "Create an account to back up your training and use it on any device. Everything already on this phone is uploaded to it." : mode === "reset" ? "Enter your email and we'll send a reset link." : "Sign in to back up your training and pick it up on any device."}
         </div>
+        {mode === "signUp" && (
+          <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 14 }}>
+            By creating an account you agree to the{" "}
+            <button type="button" onClick={() => onOpenLegal("terms")} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", color: "var(--accent)", fontSize: 12, textDecoration: "underline" }}>Terms of Use</button>
+            {" "}and{" "}
+            <button type="button" onClick={() => onOpenLegal("privacy")} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", color: "var(--accent)", fontSize: 12, textDecoration: "underline" }}>Privacy Policy</button>.
+          </div>
+        )}
         <div style={labelStyle}>Email</div>
         <input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} style={fieldStyle} />
         {mode !== "reset" && (
@@ -1050,11 +1220,17 @@ function AccountScreen({ onBack, profile }) {
       <div className="display" style={{ fontSize: 18, marginBottom: 16 }}>Account &amp; Sync</div>
       {body}
       {cloud.user && <SocialSettings userId={cloud.user.id} profile={profile} />}
+      {cloud.user && <BlockedList userId={cloud.user.id} />}
       <div style={{ marginTop: 28, paddingTop: 20, borderTop: "1px solid var(--border)" }}>
         <div style={labelStyle}>Backup</div>
         <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 12 }}>Save a copy of all your workouts, plans and settings from this device as a file. Worth doing before you sign in for the first time.</div>
         <button onClick={backup} style={{ ...homeChoiceButtonStyle, padding: "11px", textAlign: "center", fontSize: 13, fontWeight: 600 }}>Download Backup</button>
         {backupMsg && <div style={{ fontSize: 12.5, marginTop: 10, color: "var(--text)" }}>{backupMsg}</div>}
+      </div>
+      {cloud.user && <DeleteAccountSection email={cloud.user.email} onDeleted={onDeleted} />}
+      <div style={{ marginTop: 28, display: "flex", gap: 16, justifyContent: "center", fontSize: 12 }}>
+        <button onClick={() => onOpenLegal("terms")} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", textDecoration: "underline", fontSize: 12, padding: "8px 0" }}>Terms of Use</button>
+        <button onClick={() => onOpenLegal("privacy")} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", textDecoration: "underline", fontSize: 12, padding: "8px 0" }}>Privacy Policy</button>
       </div>
     </div>
   );
@@ -1281,7 +1457,7 @@ function ProfileScreen({ profile, stats, history, dayLabelFor, onSave, onBack, o
 // see what is enforced by the database, so a screen here just shows whatever
 // comes back (and a friendly "private" note when nothing does).
 // ---------------------------------------------------------------------------
-function WorkoutPostCard({ author, session, dayLabel, prs = [], isOpen, onToggle, onOpenAuthor, footer }) {
+function WorkoutPostCard({ author, session, dayLabel, prs = [], isOpen, onToggle, onOpenAuthor, onReport, footer }) {
   const blocks = session.blocks || [];
   const totals = sessionTotals(blocks);
   const shown = isOpen ? blocks : blocks.slice(0, FEED_PREVIEW_EXERCISES);
@@ -1297,6 +1473,7 @@ function WorkoutPostCard({ author, session, dayLabel, prs = [], isOpen, onToggle
             <span style={{ color: "var(--text-muted)" }}> · {fmtDate(session.date)}</span>
           </div>
         </div>
+        {onReport && <button onClick={onReport} aria-label="Report this post" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: 11.5, padding: "8px 0 8px 8px", flexShrink: 0 }}>Report</button>}
       </div>
       <div className="display" style={{ fontSize: 15, marginBottom: 8, overflowWrap: "anywhere" }}>{dayLabel}</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
@@ -1409,6 +1586,7 @@ function SignedInFeed({ me, dayLabelFor, onOpenUser, onFindPeople, onOpenAccount
   const [error, setError] = useState("");
   const [openId, setOpenId] = useState(null);
   const [pending, setPending] = useState(0);
+  const [reporting, setReporting] = useState(null); // the post being reported
 
   async function loadPage(cursor) {
     setLoading(true); setError("");
@@ -1477,11 +1655,15 @@ function SignedInFeed({ me, dayLabelFor, onOpenUser, onFindPeople, onOpenAccount
               const key = `${w.user_id}|${w.id}`;
               return (
                 <WorkoutPostCard key={key} author={toAuthor(p)} session={w} dayLabel={dayLabelFor(w)} isOpen={openId === key}
-                  onToggle={() => setOpenId(openId === key ? null : key)} onOpenAuthor={() => onOpenUser(w.user_id)} />
+                  onToggle={() => setOpenId(openId === key ? null : key)} onOpenAuthor={() => onOpenUser(w.user_id)} onReport={() => setReporting(w)} />
               );
             })}
           </div>
           {loading && <div style={{ fontSize: 12.5, color: "var(--text-muted)", textAlign: "center", padding: "16px 0" }}>Loading…</div>}
+          {reporting && authors[reporting.user_id] && (
+            <ReportSheet label={`${toAuthor(authors[reporting.user_id]).displayName}'s post`} onClose={() => setReporting(null)}
+              onSubmit={(reason, details) => reportUser(me.id, reporting.user_id, reporting.id, reason, details)} />
+          )}
           {!loading && hasMore && (
             <button onClick={() => loadPage(last)} style={{ ...homeChoiceButtonStyle, marginTop: 10, padding: "11px", textAlign: "center", fontSize: 13, fontWeight: 600 }}>Load more</button>
           )}
@@ -1564,6 +1746,9 @@ function UserProfileScreen({ me, userId, dayLabelFor, onBack }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [openId, setOpenId] = useState(null);
+  const [blocked, setBlocked] = useState(false);
+  const [confirmBlock, setConfirmBlock] = useState(false);
+  const [reporting, setReporting] = useState(false);
 
   async function loadWorkouts(offset) {
     setWLoading(true);
@@ -1583,9 +1768,9 @@ function UserProfileScreen({ me, userId, dayLabelFor, onBack }) {
         if (cancelled) return;
         setProfile(p);
         if (!p) return;
-        const [c, s] = await Promise.all([getFollowCounts(userId), getFollowStatus(me.id, userId)]);
+        const [c, s, blockedIds] = await Promise.all([getFollowCounts(userId), getFollowStatus(me.id, userId), getBlockedIds(me.id)]);
         if (cancelled) return;
-        setCounts(c); setStatus(s);
+        setCounts(c); setStatus(s); setBlocked(blockedIds.includes(userId));
         await loadWorkouts(0);
       } catch (e) { if (!cancelled) { setError(friendlySocialError(e)); setProfile((p) => (p === undefined ? null : p)); } }
     })();
@@ -1609,9 +1794,22 @@ function UserProfileScreen({ me, userId, dayLabelFor, onBack }) {
     setBusy(false);
   }
 
+  async function toggleBlock() {
+    setBusy(true); setError("");
+    try {
+      if (blocked) { await unblockUser(me.id, userId); setBlocked(false); }
+      else {
+        await blockUser(me.id, userId);
+        setBlocked(true); setStatus(null); setWorkouts([]); setTotal(0); setConfirmBlock(false);
+      }
+      getFollowCounts(userId).then(setCounts).catch(() => {});
+    } catch (e) { setError(friendlySocialError(e)); }
+    setBusy(false);
+  }
+
   const author = profile ? toAuthor(profile) : null;
   const followLabel = status === "accepted" ? "Following" : status === "pending" ? "Requested" : profile && profile.is_private ? "Request to Follow" : "Follow";
-  const canSee = profile && (!profile.is_private || status === "accepted") && profile.share_workouts;
+  const canSee = profile && !blocked && (!profile.is_private || status === "accepted") && profile.share_workouts;
 
   return (
     <div style={socialShell}>
@@ -1633,7 +1831,10 @@ function UserProfileScreen({ me, userId, dayLabelFor, onBack }) {
             <span><span className="tabular" style={{ color: "var(--text)", fontWeight: 700 }}>{counts.followers}</span> followers</span>
             <span><span className="tabular" style={{ color: "var(--text)", fontWeight: 700 }}>{counts.following}</span> following</span>
           </div>
-          {profile.id !== me.id && (
+          {profile.id !== me.id && blocked && (
+            <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 20 }}>You've blocked {author.displayName}. They can't see your profile or workouts, and you won't see theirs.</div>
+          )}
+          {profile.id !== me.id && !blocked && (
             <button onClick={toggleFollow} disabled={busy} style={{ ...(status ? homeChoiceButtonStyle : { ...homeChoiceButtonStyle, background: "var(--accent)", border: "none", color: "var(--on-accent)", boxShadow: PRIMARY_SHADOW }), padding: "11px", textAlign: "center", fontSize: 13.5, fontWeight: 700, marginBottom: 20, opacity: busy ? 0.6 : 1 }}>
               {followLabel}
             </button>
@@ -1644,7 +1845,9 @@ function UserProfileScreen({ me, userId, dayLabelFor, onBack }) {
             <div style={{ ...socialLabel, marginBottom: 0 }}>Workouts</div>
             {canSee && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{total} total</div>}
           </div>
-          {profile.is_private && status !== "accepted" ? (
+          {blocked ? (
+            <div style={{ fontSize: 12.5, color: "var(--text-muted)", textAlign: "center", padding: "24px 0" }}>Unblock to see their workouts.</div>
+          ) : profile.is_private && status !== "accepted" ? (
             <div style={{ fontSize: 12.5, color: "var(--text-muted)", textAlign: "center", padding: "24px 0", lineHeight: 1.5 }}>
               This account is private. {status === "pending" ? "Your request is waiting for approval." : "Follow to see their workouts."}
             </div>
@@ -1665,6 +1868,26 @@ function UserProfileScreen({ me, userId, dayLabelFor, onBack }) {
               )}
             </div>
           )}
+
+          {profile.id !== me.id && (
+            <div style={{ marginTop: 32, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
+              {confirmBlock ? (
+                <div style={{ padding: "12px 14px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface)" }}>
+                  <div style={{ fontSize: 13, lineHeight: 1.5, marginBottom: 10 }}>Block {author.displayName}? You'll both be removed from each other's followers, and neither of you can see the other's workouts.</div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button onClick={() => setConfirmBlock(false)} style={{ flex: 1, padding: "10px", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "1px solid var(--border)", background: "transparent", color: "var(--text-muted)" }}>Cancel</button>
+                    <button onClick={toggleBlock} disabled={busy} style={{ flex: 1, padding: "10px", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", border: "none", background: "var(--danger)", color: "#fff" }}>Block</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={blocked ? toggleBlock : () => setConfirmBlock(true)} disabled={busy} style={{ flex: 1, padding: "10px", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "1px solid var(--border)", background: "transparent", color: "var(--text-muted)" }}>{blocked ? "Unblock" : "Block"}</button>
+                  <button onClick={() => setReporting(true)} style={{ flex: 1, padding: "10px", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "1px solid var(--border)", background: "transparent", color: "var(--text-muted)" }}>Report</button>
+                </div>
+              )}
+            </div>
+          )}
+          {reporting && <ReportSheet label={author.displayName} onClose={() => setReporting(false)} onSubmit={(reason, details) => reportUser(me.id, userId, null, reason, details)} />}
         </>
       )}
     </div>
@@ -2155,7 +2378,7 @@ function PageBackground({ image }) {
 function CompletionQuoteModal({ quote, onClose }) {
   if (!quote) return null;
   const img = quote.img;
-  return (
+  return createPortal(
     <div
       onClick={onClose}
       style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
@@ -2187,7 +2410,8 @@ function CompletionQuoteModal({ quote, onClose }) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -2827,6 +3051,7 @@ export default function WorkoutTracker() {
   const cloudState = useCloud();
   const [viewUserId, setViewUserId] = useState(null);
   const [accountBack, setAccountBack] = useState("profile");
+  const [legalTab, setLegalTab] = useState("terms");
   const [userBack, setUserBack] = useState("feed");
   useEffect(() => sync.onRemoteApplied(() => setDataVersion((v) => v + 1)), []);
 
@@ -3924,7 +4149,12 @@ export default function WorkoutTracker() {
         />
       )}
 
-      {screen === "account" && <AccountScreen profile={profile} onBack={() => setScreen(accountBack)} />}
+      {screen === "account" && (
+        <AccountScreen profile={profile} onBack={() => setScreen(accountBack)}
+          onOpenLegal={(tab) => { setLegalTab(tab); setScreen("legal"); }}
+          onDeleted={() => setScreen("feed")} />
+      )}
+      {screen === "legal" && <LegalScreen key={legalTab} initial={legalTab} onBack={() => setScreen("account")} />}
 
       {screen === "feed" && (
         <FeedScreen me={cloudState.user} configured={cloudState.configured} dayLabelFor={socialDayLabel}

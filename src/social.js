@@ -39,10 +39,12 @@ export async function saveMyAccount(uid, { username, isPrivate, shareWorkouts },
 export async function searchPeople(query, myId) {
   const term = query.trim().toLowerCase().replace(/[^a-z0-9_ ]/g, "");
   if (term.length < 2) return [];
-  const res = await supabase.from("profiles").select(PROFILE_COLS)
+  const blocked = await getBlockedIds(myId);
+  let q = supabase.from("profiles").select(PROFILE_COLS)
     .or(`username.ilike.${term}%,display_name.ilike.%${term}%`)
-    .not("username", "is", null).neq("id", myId).limit(20);
-  return must(res, "Searching") || [];
+    .not("username", "is", null).neq("id", myId);
+  if (blocked.length) q = q.not("id", "in", `(${blocked.join(",")})`);
+  return must(await q.limit(20), "Searching") || [];
 }
 
 export async function getPublicProfile(id) {
@@ -106,4 +108,39 @@ export async function fetchHomeFeed(cursor, limit = 15) {
     authors = Object.fromEntries(profiles.map((p) => [p.id, p]));
   }
   return { rows, authors, hasMore: rows.length === limit };
+}
+
+// ------------------------------------------------------------------ safety
+export const REPORT_REASONS = [
+  ["spam", "Spam or fake account"],
+  ["harassment", "Harassment or bullying"],
+  ["inappropriate", "Inappropriate content"],
+  ["impersonation", "Pretending to be someone else"],
+  ["other", "Something else"],
+];
+
+export async function getBlockedIds(myId) {
+  const rows = must(await supabase.from("blocks").select("blocked_id").eq("blocker_id", myId), "Loading blocks") || [];
+  return rows.map((r) => r.blocked_id);
+}
+
+export async function getBlockedProfiles(myId) {
+  const ids = await getBlockedIds(myId);
+  if (!ids.length) return [];
+  return must(await supabase.from("profiles").select(PROFILE_COLS).in("id", ids), "Loading blocks") || [];
+}
+
+export async function blockUser(myId, otherId) {
+  must(await supabase.from("blocks").insert({ blocker_id: myId, blocked_id: otherId }), "Blocking");
+}
+
+export async function unblockUser(myId, otherId) {
+  must(await supabase.from("blocks").delete().eq("blocker_id", myId).eq("blocked_id", otherId), "Unblocking");
+}
+
+export async function reportUser(myId, targetUserId, workoutId, reason, details) {
+  must(await supabase.from("reports").insert({
+    reporter_id: myId, target_user_id: targetUserId, target_workout_id: workoutId || null,
+    reason, details: (details || "").slice(0, 500),
+  }), "Reporting");
 }

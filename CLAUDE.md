@@ -912,8 +912,9 @@ just says cloud accounts aren't on — nothing else changes.
   `SetPasswordScreen` (new + confirm password → `setNewPassword`; "Skip for
   now" → `dismissRecovery`). Only exercised end-to-end with a real reset
   email; in development the event was simulated.
-- Not yet built (roadmap): likes/comments/notifications, report/block/
-  delete-account, PR chips and stats on *other* people's profiles.
+- Not yet built (roadmap): likes/comments/notifications, PR chips and stats
+  on *other* people's profiles. (Safety — block, report, delete account,
+  Terms/Privacy — is built; see the next subsection.)
 
 ### Social: usernames, follows, feed
 
@@ -956,6 +957,45 @@ feed cutoff); that test script isn't in the repo.
 - The Feed card on Home only shows when signed in. Testing needs two real
   accounts; during development the UI was exercised against a mocked
   Supabase (fake session + fake REST) in the browser.
+
+### Safety: blocking, reports, delete account, legal
+
+Third SQL file, [supabase/safety.sql](supabase/safety.sql) (run after
+`social.sql`; idempotent), tested with the same PGlite harness (23 scenarios
+total, incl. these). Client bits live in `src/social.js` and the
+`ReportSheet`, `BlockedList`, `DeleteAccountSection`, `LegalScreen`
+components in `App.jsx`.
+
+- **Blocks** (`blocks(blocker_id, blocked_id)`): visible only to the blocker
+  (the blocked person can't tell). Inserting a block deletes any follow
+  between the two in both directions. `is_blocked_between()` is checked by
+  `follows_before_insert` (no following across a block) and
+  `can_view_workouts` (no workouts either direction), and the profiles read
+  policy hides a person from anyone they've blocked (`blocked_by()`). The
+  blocker can still open the blocked person's profile — deliberately, so
+  there's somewhere to press Unblock. Search excludes blocked people
+  client-side (`getBlockedIds`).
+- **Reports**: write-only table (`reason` from a fixed list, `details` ≤ 500
+  chars, optional `target_workout_id`); users can insert as themselves and
+  read only their own. The owner reads them in the Supabase Table Editor —
+  there is no moderation UI. Entry points: "Report" on each post in the Feed
+  and on any other user's profile.
+- **Delete account**: `delete_my_account()` (security definer) deletes the
+  `auth.users` row; every table references it `on delete cascade`. The client
+  (`deleteAccount()` in `cloud.js`) then clears `sync-meta`, signs out
+  locally, and **leaves the device's local workouts alone** so a later
+  sign-up re-uploads them. Requires typing DELETE.
+- **Terms / Privacy**: `LegalScreen` (plain-language, written by the AI, **not
+  reviewed by a lawyer** — flagged to the user). Linked from the sign-up
+  form and the Account screen. `CONTACT_EMAIL` in `src/appConfig.js` is
+  blank until the user chooses a public contact address.
+- **Popups render through a portal** (`createPortal` to `document.body`):
+  the bottom tab bar is a sibling of the page's `z-index: 1` content
+  wrapper, so anything inside that wrapper — even `z-index: 100` — sits
+  *under* the bar. `ReportSheet` and `CompletionQuoteModal` use portals for
+  that reason; new full-screen overlays must too.
+- Email: Supabase's built-in sender is rate-limited; see `supabase/SETUP.md`
+  for the custom-SMTP (Resend) steps needed before others sign up.
 
 ## Visual design conventions
 

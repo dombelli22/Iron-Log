@@ -81,6 +81,17 @@ export async function setNewPassword(password) {
   setAuth({ recovery: false });
 }
 export function dismissRecovery() { setAuth({ recovery: false }); }
+// Permanently deletes the cloud account, then signs out locally. The workouts
+// on this device stay; sync-meta is cleared so signing up again later uploads
+// them into the new account instead of thinking they belong to the old one.
+export async function deleteAccount() {
+  const { error } = await supabase.rpc("delete_my_account");
+  if (error) throw error;
+  lsStore.remove("sync-meta");
+  await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+  sync.stop();
+  setAuth({ user: null });
+}
 export async function resetPassword(email) {
   const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + window.location.pathname });
   if (error) throw error;
