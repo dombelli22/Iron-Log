@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { Dumbbell, Plus, Trash2, ChevronDown, Save, X, Loader2, History as HistoryIcon, RotateCcw, Timer, TrendingUp, Layers, Home as HomeIcon, Pencil } from "lucide-react";
+import { Dumbbell, Plus, Trash2, ChevronDown, Save, X, Loader2, History as HistoryIcon, RotateCcw, Timer, TrendingUp, Layers, Home as HomeIcon, Pencil, User as UserIcon } from "lucide-react";
 import { storage } from "./storage";
 import { getMyAccount, saveMyAccount, searchPeople, getPublicProfile, getFollowCounts, getFollowStatus, follow, unfollow, getPendingRequests, approveRequest, declineRequest, fetchUserWorkouts, fetchHomeFeed, friendlySocialError, USERNAME_RE } from "./social";
 import { useCloud, sync, signIn, signUp, signOut, resetPassword, setNewPassword, dismissRecovery } from "./cloud";
@@ -1060,7 +1060,7 @@ function AccountScreen({ onBack, profile }) {
   );
 }
 
-function ProfileScreen({ profile, stats, history, dayLabelFor, onSave, onBack, onOpenAccount }) {
+function ProfileScreen({ profile, stats, history, dayLabelFor, onSave, onBack, onOpenAccount, onManageSplit, activePlanName, onAddPast, onEditSession, onDeleteSession, canEditSession }) {
   const cloud = useCloud();
   const hasProfile = !!(profile && profile.displayName);
   const [editing, setEditing] = useState(!hasProfile);
@@ -1069,6 +1069,7 @@ function ProfileScreen({ profile, stats, history, dayLabelFor, onSave, onBack, o
   const fileRef = useRef(null);
   const [feedCount, setFeedCount] = useState(FEED_PAGE);
   const [openPostId, setOpenPostId] = useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   // Newest first; same-date sessions keep most-recently-logged on top (same rule as History).
   const feed = useMemo(() => [...history].reverse().sort((a, b) => b.date.localeCompare(a.date)), [history]);
   const prsBySession = useMemo(() => computeSessionPRs(history), [history]);
@@ -1156,8 +1157,6 @@ function ProfileScreen({ profile, stats, history, dayLabelFor, onSave, onBack, o
 
   return (
     <div style={shell}>
-      <button onClick={onBack} style={backLinkStyle}>‹ Back</button>
-
       <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 16 }}>
         <Avatar profile={profile} size={84} />
         <div style={{ minWidth: 0 }}>
@@ -1174,8 +1173,13 @@ function ProfileScreen({ profile, stats, history, dayLabelFor, onSave, onBack, o
       <button onClick={() => setEditing(true)} style={{ ...homeChoiceButtonStyle, padding: "10px", textAlign: "center", fontSize: 13, fontWeight: 600, marginBottom: 10 }}>
         Edit Profile
       </button>
-      <button onClick={onOpenAccount} style={{ ...homeChoiceButtonStyle, padding: "10px", textAlign: "center", fontSize: 13, fontWeight: 600, marginBottom: 24 }}>
+      <button onClick={onOpenAccount} style={{ ...homeChoiceButtonStyle, padding: "10px", textAlign: "center", fontSize: 13, fontWeight: 600, marginBottom: 10 }}>
         {cloud.user ? `Account & Sync · ${cloud.sync.status === "error" ? "problem" : cloud.sync.status === "syncing" ? "syncing…" : cloud.sync.status === "offline" ? "offline" : "up to date"}` : "Account & Sync"}
+      </button>
+
+      <button onClick={onManageSplit} style={{ ...homeChoiceButtonStyle, padding: "12px 14px", marginBottom: 24 }}>
+        <div className="display" style={{ fontSize: 14 }}>Manage Split</div>
+        <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 3, fontWeight: 400 }}>{activePlanName ? `${activePlanName} · change your split, days and schedule` : "Choose or build a training split"}</div>
       </button>
 
       <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
@@ -1222,6 +1226,11 @@ function ProfileScreen({ profile, stats, history, dayLabelFor, onSave, onBack, o
         <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700 }}>Workouts</div>
         <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{feed.length} total</div>
       </div>
+      {onAddPast && (
+        <button onClick={onAddPast} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "11px", borderRadius: 10, background: "transparent", border: "1px dashed var(--accent)", cursor: "pointer", color: "var(--accent)", fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
+          <Plus size={15} /> Add Past Workout
+        </button>
+      )}
       {feed.length === 0 ? (
         <div style={{ fontSize: 12.5, color: "var(--text-muted)", textAlign: "center", padding: "24px 0" }}>
           No workouts yet. Finish a session and it shows up here.
@@ -1230,7 +1239,29 @@ function ProfileScreen({ profile, stats, history, dayLabelFor, onSave, onBack, o
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {feed.slice(0, feedCount).map((session) => (
             <WorkoutPostCard key={session.id} author={profile} session={session} dayLabel={dayLabelFor(session)} prs={prsBySession[session.id] || []}
-              isOpen={openPostId === session.id} onToggle={() => setOpenPostId(openPostId === session.id ? null : session.id)} />
+              isOpen={openPostId === session.id} onToggle={() => setOpenPostId(openPostId === session.id ? null : session.id)}
+              footer={
+                confirmDeleteId === session.id ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 12, color: "var(--text-muted)", flex: 1 }}>Delete this workout?</span>
+                    <button onClick={() => setConfirmDeleteId(null)} style={{ padding: "7px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1px solid var(--border)", background: "transparent", color: "var(--text-muted)" }}>Keep</button>
+                    <button onClick={() => { setConfirmDeleteId(null); onDeleteSession(session.id); }} style={{ padding: "7px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", border: "none", background: "var(--danger)", color: "#fff" }}>Delete</button>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {canEditSession(session.id) ? (
+                      <button onClick={() => onEditSession(session)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "8px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1px solid var(--border)", background: "transparent", color: "var(--text-muted)" }}>
+                        <Pencil size={12} /> Edit
+                      </button>
+                    ) : (
+                      <span style={{ flex: 1, fontSize: 11.5, color: "var(--text-muted)", lineHeight: 1.4 }}>This week's workout — edit it from the Log tab.</span>
+                    )}
+                    <button onClick={() => setConfirmDeleteId(session.id)} aria-label="Delete workout" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 38, height: 34, borderRadius: 8, cursor: "pointer", border: "1px solid var(--border)", background: "transparent" }}>
+                      <Trash2 size={14} color="var(--text-muted)" />
+                    </button>
+                  </div>
+                )
+              } />
           ))}
           {feed.length > feedCount && (
             <button onClick={() => setFeedCount((c) => c + FEED_PAGE)} style={{ ...homeChoiceButtonStyle, padding: "11px", textAlign: "center", fontSize: 13, fontWeight: 600 }}>
@@ -1250,7 +1281,7 @@ function ProfileScreen({ profile, stats, history, dayLabelFor, onSave, onBack, o
 // see what is enforced by the database, so a screen here just shows whatever
 // comes back (and a friendly "private" note when nothing does).
 // ---------------------------------------------------------------------------
-function WorkoutPostCard({ author, session, dayLabel, prs = [], isOpen, onToggle, onOpenAuthor }) {
+function WorkoutPostCard({ author, session, dayLabel, prs = [], isOpen, onToggle, onOpenAuthor, footer }) {
   const blocks = session.blocks || [];
   const totals = sessionTotals(blocks);
   const shown = isOpen ? blocks : blocks.slice(0, FEED_PREVIEW_EXERCISES);
@@ -1297,6 +1328,7 @@ function WorkoutPostCard({ author, session, dayLabel, prs = [], isOpen, onToggle
         <span><span className="tabular" style={{ color: "var(--text)", fontWeight: 700 }}>{totals.sets}</span> sets</span>
         <span><span className="tabular" style={{ color: "var(--text)", fontWeight: 700 }}>{blocks.length}</span> exercises</span>
       </div>
+      {footer && <div style={{ marginTop: 10 }}>{footer}</div>}
     </div>
   );
 }
@@ -1324,7 +1356,51 @@ function PersonRow({ person, onOpen, right }) {
   );
 }
 
-function FeedScreen({ me, dayLabelFor, onOpenUser, onFindPeople, onOpenAccount, onBack }) {
+// Instagram-style bottom bar: Log, Feed, Profile (left to right).
+function BottomTabBar({ active, onSelect }) {
+  const tabs = [["app", "Log", Dumbbell], ["feed", "Feed", HomeIcon], ["profile", "Profile", UserIcon]];
+  return (
+    <nav style={{ position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 30, background: "var(--bg)", borderTop: "1px solid var(--border)", paddingBottom: "env(safe-area-inset-bottom)" }}>
+      <div style={{ display: "flex", maxWidth: 520, margin: "0 auto" }}>
+        {tabs.map(([key, label, Icon]) => {
+          const on = active === key;
+          return (
+            <button key={key} onClick={() => onSelect(key)} aria-current={on ? "page" : undefined}
+              style={{ flex: 1, height: 56, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, background: "none", border: "none", cursor: "pointer", color: on ? "var(--accent)" : "var(--text-muted)" }}>
+              <Icon size={21} strokeWidth={on ? 2.4 : 1.8} />
+              <span style={{ fontSize: 10.5, fontWeight: on ? 700 : 500, letterSpacing: "0.02em" }}>{label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
+
+function FeedScreen({ me, configured, dayLabelFor, onOpenUser, onFindPeople, onOpenAccount }) {
+  if (!me) {
+    return (
+      <div style={socialShell}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginBottom: 20 }}>
+          <Dumbbell size={22} color="var(--accent)" />
+          <span className="brand" style={{ fontSize: 30, lineHeight: 1 }}>IRON LOG</span>
+        </div>
+        <div style={{ padding: "18px 16px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", textAlign: "center" }}>
+          <div className="display" style={{ fontSize: 16, marginBottom: 8 }}>Your feed</div>
+          <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 14 }}>
+            {configured
+              ? "Sign in to follow people and see their new workouts here. Logging works without an account."
+              : "Cloud accounts aren't switched on for this copy of the app. Logging still works on this device."}
+          </div>
+          {configured && <button onClick={onOpenAccount} style={{ ...homeChoiceButtonStyle, padding: "12px", textAlign: "center", fontSize: 13.5, fontWeight: 700 }}>Sign In or Create Account</button>}
+        </div>
+      </div>
+    );
+  }
+  return <SignedInFeed me={me} dayLabelFor={dayLabelFor} onOpenUser={onOpenUser} onFindPeople={onFindPeople} onOpenAccount={onOpenAccount} />;
+}
+
+function SignedInFeed({ me, dayLabelFor, onOpenUser, onFindPeople, onOpenAccount }) {
   const [account, setAccount] = useState(undefined);
   const [posts, setPosts] = useState([]);
   const [authors, setAuthors] = useState({});
@@ -1364,7 +1440,6 @@ function FeedScreen({ me, dayLabelFor, onOpenUser, onFindPeople, onOpenAccount, 
   const last = posts[posts.length - 1];
   return (
     <div style={socialShell}>
-      <button onClick={onBack} style={backLinkStyle}>‹ Back</button>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 16 }}>
         <div className="display" style={{ fontSize: 18 }}>Feed</div>
         {account && account.username && (
@@ -1660,62 +1735,6 @@ function SocialSettings({ userId, profile }) {
           {msg.text && <div style={{ fontSize: 12.5, marginTop: 10, color: msg.bad ? "var(--danger)" : "var(--text)" }}>{msg.text}</div>}
         </>
       )}
-    </div>
-  );
-}
-
-// Landing screen: just enough to get into a session (Continue) or into the
-// Split Builder for everything else (choosing, building, or editing a
-// split, and its schedule) — all of that used to live here directly, but
-// consolidating it into one dedicated screen kept this one from having to
-// juggle "pick a plan" and "log a workout" at once.
-function HomeScreen({ activePlan, profile, onContinue, onManageSplit, onOpenProfile, onOpenFeed }) {
-  const header = (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginBottom: 4 }}>
-      <Dumbbell size={22} color="var(--accent)" />
-      <span className="brand" style={{ fontSize: 30, lineHeight: 1 }}>IRON LOG</span>
-    </div>
-  );
-  return (
-    <div style={{ padding: "calc(24px + env(safe-area-inset-top)) 16px calc(60px + env(safe-area-inset-bottom))", maxWidth: 520, margin: "0 auto" }}>
-      {header}
-      <div className="display" style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center", letterSpacing: "0.08em", marginBottom: 20 }}>
-        {activePlan ? "Ready to Train" : "Let's Get Started"}
-      </div>
-
-      <button onClick={onOpenProfile} style={{ ...homeChoiceButtonStyle, display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", marginBottom: 16 }}>
-        <Avatar profile={profile} size={40} />
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div className="display" style={{ fontSize: 15, overflowWrap: "anywhere" }}>{profile && profile.displayName ? profile.displayName : "Set up your profile"}</div>
-          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{profile && profile.displayName ? "View profile & stats" : "Add your name and photo"}</div>
-        </div>
-      </button>
-
-      {activePlan ? (
-        <button
-          onClick={onContinue}
-          style={{ width: "100%", textAlign: "left", padding: "16px", borderRadius: 12, background: "var(--accent-dim)", border: "1px solid var(--accent)", cursor: "pointer", marginBottom: 16, color: "var(--text)", boxShadow: "0 2px 8px rgba(0,0,0,0.28)" }}
-        >
-          <div style={{ fontSize: 11, color: "var(--accent)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Continue</div>
-          <div className="display" style={{ fontSize: 16 }}>{activePlan.name}</div>
-        </button>
-      ) : (
-        <div style={{ fontSize: 12.5, color: "var(--text-muted)", textAlign: "center", lineHeight: 1.5, marginBottom: 20 }}>
-          You don't have a training split set up yet.
-        </div>
-      )}
-
-      {onOpenFeed && (
-        <button onClick={onOpenFeed} style={{ width: "100%", textAlign: "left", padding: "16px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", cursor: "pointer", color: "var(--text)", marginBottom: 16 }}>
-          <div className="display" style={{ fontSize: 15 }}>Feed</div>
-          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3 }}>New workouts from the people you follow</div>
-        </button>
-      )}
-
-      <button onClick={onManageSplit} style={{ width: "100%", textAlign: "left", padding: "16px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", cursor: "pointer", color: "var(--text)" }}>
-        <div className="display" style={{ fontSize: 15 }}>Manage Split</div>
-        <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3 }}>Browse, build, or edit your training split, and set your schedule</div>
-      </button>
     </div>
   );
 }
@@ -2058,7 +2077,7 @@ function AddPastWorkoutSetup({ plan, onStart, onBack }) {
   return (
     <div style={{ padding: "calc(24px + env(safe-area-inset-top)) 16px calc(60px + env(safe-area-inset-bottom))", maxWidth: 520, margin: "0 auto" }}>
       <button onClick={onBack} style={backLinkStyle}>
-        ‹ Back to History
+        ‹ Back
       </button>
       <div className="display" style={{ fontSize: 18, marginBottom: 4 }}>Add a Past Workout</div>
       <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 20 }}>
@@ -2745,18 +2764,15 @@ function PlanEditorScreen({ plan, effectiveDays, onAddSlot, onRemoveSlot, onSubt
 export default function WorkoutTracker() {
   // Always land on Home first; it decides whether to jump back into a
   // previously-chosen plan or ask you to pick one.
-  const [screen, setScreen] = useState("home");
+  const [screen, setScreen] = useState("feed");
   const [selectedPlanId, setSelectedPlanId] = useState(null);
   const [planLoaded, setPlanLoaded] = useState(false);
   const [schedules, setSchedules] = useState({}); // { [planId]: { Monday: dayKey|null, ..., Sunday: dayKey|null } }
   const [schedulesLoaded, setSchedulesLoaded] = useState(false);
   const [scheduleDraft, setScheduleDraft] = useState(null); // schedule being edited on the Assign Schedule screen
 
-  const [view, setView] = useState("log");
   const [day, setDay] = useState(null);
   const [openSlot, setOpenSlot] = useState(null);
-  const [openHistoryId, setOpenHistoryId] = useState(null); // history session id expanded to the summary view
-  const [fullHistoryId, setFullHistoryId] = useState(null); // history session id expanded further, to the full per-set view
   const [editingHistoryId, setEditingHistoryId] = useState(null); // history session id currently being edited in place
   const [historyEditDraft, setHistoryEditDraft] = useState(null); // working copy of that session's blocks while editing
   const [backfill, setBackfill] = useState(null); // null | { date: "YYYY-MM-DD", dayKey: string | "__custom__" } — set while logging a past workout
@@ -2810,6 +2826,7 @@ export default function WorkoutTracker() {
   const [dataVersion, setDataVersion] = useState(0);
   const cloudState = useCloud();
   const [viewUserId, setViewUserId] = useState(null);
+  const [accountBack, setAccountBack] = useState("profile");
   const [userBack, setUserBack] = useState("feed");
   useEffect(() => sync.onRemoteApplied(() => setDataVersion((v) => v + 1)), []);
 
@@ -3071,7 +3088,6 @@ export default function WorkoutTracker() {
     setOpenAddedId(null);
     setHiddenSlots({});
     setAddFlow(null);
-    setView("log");
 
     const existingSchedule = schedules[plan.id];
     if (existingSchedule) {
@@ -3189,11 +3205,15 @@ export default function WorkoutTracker() {
     updateDayOverride(dayKey, (d) => ({ ...d, subtitle }));
   }
 
-  function goToHome() {
-    setScreen("home");
+  function goToProfile() {
+    setScreen("profile");
   }
 
   const isCustomBackfill = backfill?.dayKey === "__custom__";
+  const editingSession = editingHistoryId ? history.find((h) => h.id === editingHistoryId) : null;
+  // The bottom Log / Feed / Profile bar shows on the main screens only — not on
+  // setup flows, the workout editor, or while logging a past workout.
+  const tabBarVisible = ["app", "feed", "people", "user", "profile"].includes(screen) && !backfill && !cloudState.recovery;
 
   // Starts logging a past workout: either one of the active plan's own days
   // (dayKey is a real key from workoutData) or a session that doesn't match
@@ -3211,7 +3231,6 @@ export default function WorkoutTracker() {
     setAddedDraft((prev) => ({ ...prev, [effectiveDay]: [] }));
     setDay(effectiveDay);
     setBackfill({ date, dayKey });
-    setView("log");
     setScreen("app");
   }
 
@@ -3224,7 +3243,7 @@ export default function WorkoutTracker() {
     setOpenAddedId(null);
     setAddFlow(null);
     setDay(activePlan ? getScheduledDay(activePlan, activeSchedule) : null);
-    setView("history");
+    setScreen("profile");
   }
 
   const dayData = workoutData && day ? workoutData[day] : null;
@@ -3641,7 +3660,7 @@ export default function WorkoutTracker() {
           setOpenAddedId(null);
           setBackfill(null);
           setDay(activePlan ? getScheduledDay(activePlan, activeSchedule) : null);
-          setView("history");
+          setScreen("profile");
         } else {
           // Keep the draft showing for the rest of the week — record what was
           // saved so it survives a reload, and so re-saving later this week
@@ -3719,11 +3738,12 @@ export default function WorkoutTracker() {
       (session.blocks || []).map((b) => ({ ...b, sets: b.sets.map((s) => ({ ...s, extra: s.extra ? { ...s.extra } : null })) }))
     );
     setEditingHistoryId(session.id);
-    setFullHistoryId(session.id);
+    setScreen("editWorkout");
   }
   function cancelEditHistory() {
     setEditingHistoryId(null);
     setHistoryEditDraft(null);
+    setScreen("profile");
   }
   function updateEditBlockField(blockIndex, field, value) {
     setHistoryEditDraft((prev) => prev.map((b, i) => (i === blockIndex ? { ...b, [field]: value } : b)));
@@ -3796,25 +3816,13 @@ export default function WorkoutTracker() {
         setHistory(updated);
         setEditingHistoryId(null);
         setHistoryEditDraft(null);
+        setScreen("profile");
       } else {
         setStorageError("Couldn't save — try again.");
       }
     } catch (e) {
       setStorageError("Couldn't save — try again.");
     }
-  }
-
-  function fmtSetsList(block) {
-    return block.sets
-      .map((s) => {
-        const mainStr = block.type === "time" ? (s.weight > 0 ? `+${s.weight}×${s.value}s` : `${s.value}s`) : `${s.weight}×${s.value}`;
-        if (s.extra) {
-          const tag = s.extra.type === "superset" ? "SS" : "DS";
-          return `${mainStr} [${tag}: ${s.extra.exercise} ${s.extra.weight}×${s.extra.value}]`;
-        }
-        return mainStr;
-      })
-      .join(", ");
   }
 
   // Best set = highest weight wins; among equal weights, highest reps/time wins.
@@ -3861,7 +3869,7 @@ export default function WorkoutTracker() {
   // screen, not the exact screen — schedule/build/backfill-setup share one
   // (they're all secondary setup flows) so this stays 4 images, not 6+.
   const bgImage =
-    screen === "home" ? "home" : screen === "app" ? (view === "history" ? "history" : "log") : "utility";
+    screen === "feed" || screen === "people" || screen === "user" ? "home" : screen === "app" ? "log" : screen === "profile" ? "history" : "utility";
 
   return (
     <div style={{ background: "var(--bg)", minHeight: "100%", color: "var(--text)", fontFamily: "'Inter', sans-serif" }}>
@@ -3894,11 +3902,7 @@ export default function WorkoutTracker() {
         @keyframes pop { 0% { transform: scale(1); } 40% { transform: scale(1.06); } 100% { transform: scale(1); } }
       `}</style>
 
-      <div style={{ position: "relative", zIndex: 1 }}>
-      {screen === "home" && (
-        <HomeScreen activePlan={activePlan} profile={profile} onContinue={continueWithCurrentPlan} onManageSplit={() => setScreen("splitBuilder")} onOpenProfile={() => setScreen("profile")} onOpenFeed={cloudState.user ? () => setScreen("feed") : null} />
-      )}
-
+      <div style={{ position: "relative", zIndex: 1, paddingBottom: tabBarVisible ? "calc(56px + env(safe-area-inset-bottom))" : 0 }}>
       {screen === "profile" && (
         <ProfileScreen
           profile={profile}
@@ -3909,17 +3913,23 @@ export default function WorkoutTracker() {
             return d ? (d.label !== d.tab ? `${d.tab} · ${d.label}` : d.tab) : session.day;
           }}
           onSave={saveProfile}
-          onBack={goToHome}
-          onOpenAccount={() => setScreen("account")}
+          onBack={() => setScreen("feed")}
+          onOpenAccount={() => { setAccountBack("profile"); setScreen("account"); }}
+          onManageSplit={() => setScreen("splitBuilder")}
+          activePlanName={activePlan ? activePlan.name : null}
+          onAddPast={activePlan ? () => setScreen("addPastWorkout") : null}
+          onEditSession={startEditHistory}
+          onDeleteSession={deleteSession}
+          canEditSession={(id) => !liveLinkedHistoryIds.has(id)}
         />
       )}
 
-      {screen === "account" && <AccountScreen profile={profile} onBack={() => setScreen("profile")} />}
+      {screen === "account" && <AccountScreen profile={profile} onBack={() => setScreen(accountBack)} />}
 
-      {screen === "feed" && cloudState.user && (
-        <FeedScreen me={cloudState.user} dayLabelFor={socialDayLabel}
+      {screen === "feed" && (
+        <FeedScreen me={cloudState.user} configured={cloudState.configured} dayLabelFor={socialDayLabel}
           onOpenUser={(id) => { setViewUserId(id); setUserBack("feed"); setScreen("user"); }}
-          onFindPeople={() => setScreen("people")} onOpenAccount={() => setScreen("account")} onBack={goToHome} />
+          onFindPeople={() => setScreen("people")} onOpenAccount={() => { setAccountBack("feed"); setScreen("account"); }} />
       )}
       {screen === "people" && cloudState.user && (
         <PeopleScreen me={cloudState.user} onOpenUser={(id) => { setViewUserId(id); setUserBack("people"); setScreen("user"); }} onBack={() => setScreen("feed")} />
@@ -3936,7 +3946,7 @@ export default function WorkoutTracker() {
           onStartBuild={startBuildPlan}
           onOpenPlanEditor={openPlanEditor}
           onOpenSchedule={openScheduleEditor}
-          onBack={goToHome}
+          onBack={goToProfile}
           repRange={repRangeSetting}
           onRepRangeChange={updateRepRange}
         />
@@ -3955,10 +3965,22 @@ export default function WorkoutTracker() {
       )}
 
       {screen === "addPastWorkout" && activePlan && (
-        <AddPastWorkoutSetup plan={activePlan} onStart={startBackfill} onBack={() => setScreen("app")} />
+        <AddPastWorkoutSetup plan={activePlan} onStart={startBackfill} onBack={() => setScreen("profile")} />
       )}
 
-      {screen === "app" && (
+      {screen === "app" && planLoaded && !activePlan && (
+        <div style={{ ...socialShell, textAlign: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginBottom: 20 }}>
+            <Dumbbell size={20} color="var(--accent)" />
+            <span className="brand" style={{ fontSize: 26, lineHeight: 1 }}>IRON LOG</span>
+          </div>
+          <div className="display" style={{ fontSize: 16, marginBottom: 8 }}>No training split yet</div>
+          <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 18 }}>Pick or build a split and your workouts show up here to log.</div>
+          <button onClick={() => setScreen("splitBuilder")} style={{ ...homeChoiceButtonStyle, padding: "12px", textAlign: "center", fontSize: 13.5, fontWeight: 700 }}>Choose a Split</button>
+        </div>
+      )}
+
+      {screen === "app" && activePlan && dayData && (
       <>
       {/* Header */}
       <div style={{ position: "sticky", top: 0, zIndex: 20, background: "var(--bg)", borderBottom: "1px solid var(--border)", paddingTop: "env(safe-area-inset-top)" }}>
@@ -3967,22 +3989,9 @@ export default function WorkoutTracker() {
             <Dumbbell size={20} color="var(--accent)" />
             <span className="brand" style={{ fontSize: 26, lineHeight: 1 }}>IRON LOG</span>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <button onClick={goToHome} title="Change plan" style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)", cursor: "pointer" }}>
-              <HomeIcon size={15} color="var(--text-muted)" />
-            </button>
-            <div style={{ display: "flex", gap: 4, background: "var(--surface)", padding: 3, borderRadius: 10, border: "1px solid var(--border)" }}>
-              <button onClick={() => setView("log")} style={{ padding: "6px 12px", borderRadius: 7, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: view === "log" ? "var(--accent)" : "transparent", color: view === "log" ? "var(--on-accent)" : "var(--text-muted)" }}>
-                Log
-              </button>
-              <button onClick={() => setView("history")} style={{ padding: "6px 12px", borderRadius: 7, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 5, background: view === "history" ? "var(--accent)" : "transparent", color: view === "history" ? "var(--on-accent)" : "var(--text-muted)" }}>
-                <HistoryIcon size={13} /> History
-              </button>
-            </div>
-          </div>
         </div>
 
-        {view === "log" && (
+        {(
           <>
             {backfill ? (
               <div style={{ padding: "0 16px 12px" }}>
@@ -4038,7 +4047,7 @@ export default function WorkoutTracker() {
       </div>
 
       {/* Body */}
-      {view === "log" ? (
+      {(
         <div style={{ padding: "10px 16px 120px" }}>
           {!isCustomBackfill && dayData.slots.filter((slot) => backfill || !(hiddenSlots[day] || []).includes(slot.key)).map((slot) => {
             const isOpen = openSlot === slot.key;
@@ -4677,283 +4686,11 @@ export default function WorkoutTracker() {
             </button>
           )}
         </div>
-      ) : (
-        <div style={{ padding: "10px 16px 40px" }}>
-          {activePlan && (
-            <button
-              onClick={() => setScreen("addPastWorkout")}
-              style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "11px", borderRadius: 10, background: "transparent", border: "1px dashed var(--accent)", cursor: "pointer", color: "var(--accent)", fontSize: 13, fontWeight: 700, marginBottom: 14 }}
-            >
-              <Plus size={15} /> Add Past Workout
-            </button>
-          )}
-          {!historyLoaded ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-muted)", fontSize: 13, padding: "20px 0" }}>
-              <Loader2 size={16} /> Loading history…
-            </div>
-          ) : history.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "60px 20px", color: "var(--text-muted)" }}>
-              <HistoryIcon size={26} style={{ marginBottom: 10, opacity: 0.5 }} />
-              <div style={{ fontSize: 14 }}>No workouts logged yet.</div>
-              <div style={{ fontSize: 12.5, marginTop: 4 }}>Finish a session and hit Save Workout to start your log.</div>
-            </div>
-          ) : (
-            [...history]
-              .reverse()
-              .sort((a, b) => b.date.localeCompare(a.date))
-              .map((s) => {
-              const blocks = s.blocks || [];
-              const vol = blocks.reduce((sum, b) => {
-                const mainVol = b.type === "reps" ? b.sets.reduce((s2, st) => s2 + st.weight * st.value, 0) : 0;
-                const extraVol = b.sets.reduce((s2, st) => s2 + (st.extra ? st.extra.weight * st.extra.value : 0), 0);
-                return sum + mainVol + extraVol;
-              }, 0);
-              const hold = blocks.filter((b) => b.type === "time").reduce((sum, b) => sum + b.sets.reduce((s2, st) => s2 + st.value, 0), 0);
-              const isOpen = openHistoryId === s.id;
-              const isFull = fullHistoryId === s.id;
-              const isEditing = editingHistoryId === s.id;
-              const canEdit = !liveLinkedHistoryIds.has(s.id);
-              return (
-                <div key={s.id} style={{ marginBottom: 10, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
-                  <button
-                    onClick={() => { setOpenHistoryId(isOpen ? null : s.id); if (isOpen) { setFullHistoryId(null); setEditingHistoryId(null); setHistoryEditDraft(null); } }}
-                    style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: 14, background: "transparent", border: "none", cursor: "pointer", textAlign: "left" }}
-                  >
-                    <div>
-                      <div className="display" style={{ fontSize: 14 }}>
-                        {allDaysByKey[s.day]?.tab || s.day}
-                        {allDaysByKey[s.day] && allDaysByKey[s.day].label !== allDaysByKey[s.day].tab && ` · ${allDaysByKey[s.day].label}`}
-                      </div>
-                      <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>{fmtDate(s.date)}</div>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      {hold > 0 && <span className="tabular" style={{ fontSize: 12, color: "var(--time)" }}>{hold}s</span>}
-                      {vol > 0 && <span className="tabular" style={{ fontSize: 13, color: "var(--accent)", fontWeight: 700 }}>{vol.toLocaleString()} lb</span>}
-                      <span
-                        role="button"
-                        onClick={(e) => { e.stopPropagation(); deleteSession(s.id); }}
-                        style={{ display: "flex", cursor: "pointer" }}
-                      >
-                        <Trash2 size={14} color="var(--text-muted)" />
-                      </span>
-                      <ChevronDown size={16} color="var(--text-muted)" style={{ transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
-                    </div>
-                  </button>
-
-                  {isOpen && (
-                    <div style={{ padding: "0 14px 14px" }}>
-                      {!isFull ? (
-                        <>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
-                            {blocks.map((b, i) => (
-                              <div key={i}>
-                                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5 }}>
-                                  <span style={{ color: "var(--text-muted)" }}>{b.slot}: <span style={{ color: "var(--text)" }}>{b.exercise}</span></span>
-                                  <span className="tabular" style={{ color: b.type === "time" ? "var(--time)" : "var(--text-muted)" }}>{fmtSetsList(b)}</span>
-                                </div>
-                                {b.attachment && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>Attachment: {b.attachment}</div>}
-                                {b.notes && <div style={{ fontSize: 11.5, color: "var(--text-muted)", fontStyle: "italic", marginTop: 2 }}>{b.notes}</div>}
-                              </div>
-                            ))}
-                          </div>
-                          <button
-                            onClick={() => setFullHistoryId(s.id)}
-                            style={{ width: "100%", padding: "8px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1px solid var(--border)", background: "transparent", color: "var(--text-muted)" }}
-                          >
-                            Show Full Detail
-                          </button>
-                        </>
-                      ) : isEditing ? (
-                        <>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 10 }}>
-                            {historyEditDraft.map((b, bi) => (
-                              <div key={bi} style={{ background: "var(--surface-2)", borderRadius: 10, padding: "10px 12px" }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-                                  <input
-                                    type="text"
-                                    value={b.exercise}
-                                    onChange={(e) => updateEditBlockField(bi, "exercise", e.target.value)}
-                                    placeholder="Exercise name"
-                                    style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13, fontWeight: 700 }}
-                                  />
-                                  <button onClick={() => removeEditBlock(bi)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, flexShrink: 0 }}>
-                                    <Trash2 size={14} color="var(--text-muted)" />
-                                  </button>
-                                </div>
-                                <input
-                                  type="text"
-                                  value={b.attachment || ""}
-                                  onChange={(e) => updateEditBlockField(bi, "attachment", e.target.value)}
-                                  placeholder="Attachment (optional)"
-                                  style={{ width: "100%", padding: "7px 9px", marginBottom: 6, borderRadius: 7, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
-                                />
-                                <textarea
-                                  rows={2}
-                                  value={b.notes || ""}
-                                  onChange={(e) => updateEditBlockField(bi, "notes", e.target.value)}
-                                  placeholder="Notes"
-                                  style={{ width: "100%", padding: "7px 9px", marginBottom: 8, borderRadius: 7, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5, lineHeight: 1.4 }}
-                                />
-                                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                                  {b.sets.map((st, si) => (
-                                    <div key={si} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                                      <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                                        <span className="tabular" style={{ fontSize: 11, color: "var(--text-muted)", width: 34, flexShrink: 0 }}>Set {si + 1}</span>
-                                        <input
-                                          type="number" inputMode="decimal"
-                                          placeholder={b.type === "time" ? "Wt (opt)" : "Weight"}
-                                          value={st.weight}
-                                          onChange={(e) => updateEditSetField(bi, si, "weight", e.target.value)}
-                                          style={{ flex: 1, minWidth: 0, padding: "8px 6px", borderRadius: 7, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13 }}
-                                        />
-                                        {b.type === "time" ? (
-                                          <input
-                                            type="number" inputMode="numeric"
-                                            placeholder="Sec"
-                                            value={st.value}
-                                            onChange={(e) => updateEditSetField(bi, si, "value", e.target.value)}
-                                            style={{ flex: 1, minWidth: 0, padding: "8px 6px", borderRadius: 7, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13 }}
-                                          />
-                                        ) : (
-                                          <input
-                                            type="number" inputMode="numeric"
-                                            placeholder="Reps"
-                                            value={st.value}
-                                            onChange={(e) => updateEditSetField(bi, si, "value", e.target.value)}
-                                            style={{ flex: 1, minWidth: 0, padding: "8px 6px", borderRadius: 7, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13 }}
-                                          />
-                                        )}
-                                        <button onClick={() => removeEditSet(bi, si)} disabled={b.sets.length === 1} style={{ background: "none", border: "none", cursor: b.sets.length === 1 ? "default" : "pointer", padding: 4, opacity: b.sets.length === 1 ? 0.25 : 1, flexShrink: 0 }}>
-                                          <X size={14} color="var(--text-muted)" />
-                                        </button>
-                                      </div>
-                                      {st.extra ? (
-                                        <div style={{ marginLeft: 41, padding: "8px 9px", background: "var(--surface)", border: "1px dashed var(--border)", borderRadius: 8, display: "flex", flexDirection: "column", gap: 6 }}>
-                                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                                            <div style={{ display: "flex", gap: 4 }}>
-                                              <button onClick={() => updateEditExtraField(bi, si, "type", "superset")} style={{ padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", border: st.extra.type === "superset" ? "1px solid var(--accent)" : "1px solid var(--border)", background: st.extra.type === "superset" ? "var(--accent-dim)" : "transparent", color: st.extra.type === "superset" ? "var(--accent)" : "var(--text-muted)" }}>Superset</button>
-                                              <button onClick={() => updateEditExtraField(bi, si, "type", "dropset")} style={{ padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", border: st.extra.type === "dropset" ? "1px solid var(--accent)" : "1px solid var(--border)", background: st.extra.type === "dropset" ? "var(--accent-dim)" : "transparent", color: st.extra.type === "dropset" ? "var(--accent)" : "var(--text-muted)" }}>Drop Set</button>
-                                            </div>
-                                            <button onClick={() => removeEditExtra(bi, si)} style={{ background: "none", border: "none", cursor: "pointer", padding: 3 }}>
-                                              <X size={12} color="var(--text-muted)" />
-                                            </button>
-                                          </div>
-                                          <input
-                                            type="text"
-                                            placeholder="Exercise name"
-                                            value={st.extra.exercise}
-                                            onChange={(e) => updateEditExtraField(bi, si, "exercise", e.target.value)}
-                                            style={{ width: "100%", padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
-                                          />
-                                          <div style={{ display: "flex", gap: 6 }}>
-                                            <input
-                                              type="number" inputMode="decimal"
-                                              placeholder="Weight"
-                                              value={st.extra.weight}
-                                              onChange={(e) => updateEditExtraField(bi, si, "weight", e.target.value)}
-                                              style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
-                                            />
-                                            <input
-                                              type="number" inputMode="numeric"
-                                              placeholder="Reps"
-                                              value={st.extra.value}
-                                              onChange={(e) => updateEditExtraField(bi, si, "value", e.target.value)}
-                                              style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
-                                            />
-                                          </div>
-                                        </div>
-                                      ) : (
-                                        <button onClick={() => addEditExtra(bi, si)} style={{ marginLeft: 41, alignSelf: "flex-start", display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: 11 }}>
-                                          <Layers size={11} /> Superset / drop set
-                                        </button>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                                <button onClick={() => addEditSet(bi)} style={{ marginTop: 9, width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "7px", borderRadius: 7, background: "var(--surface)", border: "1px dashed var(--border)", cursor: "pointer", color: "var(--text-muted)", fontSize: 12, fontWeight: 600 }}>
-                                  <Plus size={13} /> Add Set
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                          <button onClick={addEditBlock} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px", marginBottom: 10, borderRadius: 8, background: "transparent", border: "1px dashed var(--accent)", cursor: "pointer", color: "var(--accent)", fontSize: 12.5, fontWeight: 700 }}>
-                            <Plus size={14} /> Add Exercise
-                          </button>
-                          <div style={{ display: "flex", gap: 8 }}>
-                            <button onClick={cancelEditHistory} style={{ flex: 1, padding: "9px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer", border: "1px solid var(--border)", background: "transparent", color: "var(--text-muted)" }}>
-                              Cancel
-                            </button>
-                            <button
-                              onClick={() => saveHistoryEdit(s.id)}
-                              disabled={cleanedHistoryEdit.length === 0}
-                              style={{ flex: 1, padding: "9px", borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: cleanedHistoryEdit.length === 0 ? "default" : "pointer", border: "none", background: cleanedHistoryEdit.length === 0 ? "var(--surface-2)" : "var(--accent)", color: cleanedHistoryEdit.length === 0 ? "var(--text-muted)" : "var(--on-accent)", boxShadow: cleanedHistoryEdit.length === 0 ? "none" : PRIMARY_SHADOW }}
-                            >
-                              Save Changes
-                            </button>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 10 }}>
-                            {blocks.map((b, i) => (
-                              <div key={i} style={{ background: "var(--surface-2)", borderRadius: 10, padding: "10px 12px" }}>
-                                <div style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{b.slot}</div>
-                                <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: b.attachment || b.notes ? 4 : 8 }}>{b.exercise}</div>
-                                {b.attachment && <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>Attachment: {b.attachment}</div>}
-                                {b.notes && <div style={{ fontSize: 11.5, color: "var(--text-muted)", fontStyle: "italic", marginBottom: 8 }}>{b.notes}</div>}
-                                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                                  {b.sets.map((st, si) => (
-                                    <div key={si} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                                      <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5 }}>
-                                        <span className="tabular" style={{ color: "var(--text-muted)", width: 34, flexShrink: 0 }}>Set {si + 1}</span>
-                                        <span className="tabular" style={{ color: b.type === "time" ? "var(--time)" : "var(--text)", fontWeight: 600 }}>
-                                          {b.type === "time"
-                                            ? (st.weight > 0 ? `+${st.weight} lb · ${st.value}s` : `${st.value}s`)
-                                            : `${st.weight} lb × ${st.value}`}
-                                        </span>
-                                      </div>
-                                      {st.extra && (
-                                        <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--text-muted)", paddingLeft: 41 }}>
-                                          <Layers size={10} style={{ flexShrink: 0 }} />
-                                          {st.extra.type === "superset" ? "Superset" : "Drop set"}: {st.extra.exercise} — <span className="tabular">{st.extra.weight} lb × {st.extra.value}</span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                          <div style={{ display: "flex", gap: 8 }}>
-                            {canEdit && (
-                              <button
-                                onClick={() => startEditHistory(s)}
-                                style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "8px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1px solid var(--border)", background: "transparent", color: "var(--text-muted)" }}
-                              >
-                                <Pencil size={12} /> Edit
-                              </button>
-                            )}
-                            <button
-                              onClick={() => setFullHistoryId(null)}
-                              style={{ flex: 1, padding: "8px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1px solid var(--border)", background: "transparent", color: "var(--text-muted)" }}
-                            >
-                              Show Summary
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </div>
       )}
 
       {/* Sticky save bar */}
-      {view === "log" && sessionBlocks.length > 0 && (
-        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, padding: "12px 16px", paddingBottom: "calc(12px + env(safe-area-inset-bottom))", background: "linear-gradient(to top, var(--bg) 70%, transparent)" }}>
+      {sessionBlocks.length > 0 && (
+        <div style={{ position: "fixed", bottom: tabBarVisible ? "calc(56px + env(safe-area-inset-bottom))" : 0, left: 0, right: 0, padding: "12px 16px", paddingBottom: tabBarVisible ? 12 : "calc(12px + env(safe-area-inset-bottom))", background: "linear-gradient(to top, var(--bg) 70%, transparent)" }}>
           {storageError && <div style={{ fontSize: 12, color: "var(--danger)", marginBottom: 6, textAlign: "center" }}>{storageError}</div>}
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={discardSession} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 44, borderRadius: 10, background: "var(--surface)", border: "1px solid var(--border)", cursor: "pointer" }}>
@@ -4973,8 +4710,153 @@ export default function WorkoutTracker() {
       </>
       )}
 
+      {screen === "editWorkout" && editingSession && (
+        <div style={socialShell}>
+          <button onClick={cancelEditHistory} style={backLinkStyle}>‹ Cancel</button>
+          <div className="display" style={{ fontSize: 18, marginBottom: 4 }}>Edit Workout</div>
+          <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 16 }}>{socialDayLabel(editingSession)} · {fmtDate(editingSession.date)}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 10 }}>
+        {historyEditDraft.map((b, bi) => (
+          <div key={bi} style={{ background: "var(--surface-2)", borderRadius: 10, padding: "10px 12px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+              <input
+                type="text"
+                value={b.exercise}
+                onChange={(e) => updateEditBlockField(bi, "exercise", e.target.value)}
+                placeholder="Exercise name"
+                style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13, fontWeight: 700 }}
+              />
+              <button onClick={() => removeEditBlock(bi)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, flexShrink: 0 }}>
+                <Trash2 size={14} color="var(--text-muted)" />
+              </button>
+            </div>
+            <input
+              type="text"
+              value={b.attachment || ""}
+              onChange={(e) => updateEditBlockField(bi, "attachment", e.target.value)}
+              placeholder="Attachment (optional)"
+              style={{ width: "100%", padding: "7px 9px", marginBottom: 6, borderRadius: 7, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
+            />
+            <textarea
+              rows={2}
+              value={b.notes || ""}
+              onChange={(e) => updateEditBlockField(bi, "notes", e.target.value)}
+              placeholder="Notes"
+              style={{ width: "100%", padding: "7px 9px", marginBottom: 8, borderRadius: 7, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5, lineHeight: 1.4 }}
+            />
+            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+              {b.sets.map((st, si) => (
+                <div key={si} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                    <span className="tabular" style={{ fontSize: 11, color: "var(--text-muted)", width: 34, flexShrink: 0 }}>Set {si + 1}</span>
+                    <input
+                      type="number" inputMode="decimal"
+                      placeholder={b.type === "time" ? "Wt (opt)" : "Weight"}
+                      value={st.weight}
+                      onChange={(e) => updateEditSetField(bi, si, "weight", e.target.value)}
+                      style={{ flex: 1, minWidth: 0, padding: "8px 6px", borderRadius: 7, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13 }}
+                    />
+                    {b.type === "time" ? (
+                      <input
+                        type="number" inputMode="numeric"
+                        placeholder="Sec"
+                        value={st.value}
+                        onChange={(e) => updateEditSetField(bi, si, "value", e.target.value)}
+                        style={{ flex: 1, minWidth: 0, padding: "8px 6px", borderRadius: 7, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13 }}
+                      />
+                    ) : (
+                      <input
+                        type="number" inputMode="numeric"
+                        placeholder="Reps"
+                        value={st.value}
+                        onChange={(e) => updateEditSetField(bi, si, "value", e.target.value)}
+                        style={{ flex: 1, minWidth: 0, padding: "8px 6px", borderRadius: 7, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13 }}
+                      />
+                    )}
+                    <button onClick={() => removeEditSet(bi, si)} disabled={b.sets.length === 1} style={{ background: "none", border: "none", cursor: b.sets.length === 1 ? "default" : "pointer", padding: 4, opacity: b.sets.length === 1 ? 0.25 : 1, flexShrink: 0 }}>
+                      <X size={14} color="var(--text-muted)" />
+                    </button>
+                  </div>
+                  {st.extra ? (
+                    <div style={{ marginLeft: 41, padding: "8px 9px", background: "var(--surface)", border: "1px dashed var(--border)", borderRadius: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <div style={{ display: "flex", gap: 4 }}>
+                          <button onClick={() => updateEditExtraField(bi, si, "type", "superset")} style={{ padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", border: st.extra.type === "superset" ? "1px solid var(--accent)" : "1px solid var(--border)", background: st.extra.type === "superset" ? "var(--accent-dim)" : "transparent", color: st.extra.type === "superset" ? "var(--accent)" : "var(--text-muted)" }}>Superset</button>
+                          <button onClick={() => updateEditExtraField(bi, si, "type", "dropset")} style={{ padding: "3px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", border: st.extra.type === "dropset" ? "1px solid var(--accent)" : "1px solid var(--border)", background: st.extra.type === "dropset" ? "var(--accent-dim)" : "transparent", color: st.extra.type === "dropset" ? "var(--accent)" : "var(--text-muted)" }}>Drop Set</button>
+                        </div>
+                        <button onClick={() => removeEditExtra(bi, si)} style={{ background: "none", border: "none", cursor: "pointer", padding: 3 }}>
+                          <X size={12} color="var(--text-muted)" />
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Exercise name"
+                        value={st.extra.exercise}
+                        onChange={(e) => updateEditExtraField(bi, si, "exercise", e.target.value)}
+                        style={{ width: "100%", padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
+                      />
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <input
+                          type="number" inputMode="decimal"
+                          placeholder="Weight"
+                          value={st.extra.weight}
+                          onChange={(e) => updateEditExtraField(bi, si, "weight", e.target.value)}
+                          style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
+                        />
+                        <input
+                          type="number" inputMode="numeric"
+                          placeholder="Reps"
+                          value={st.extra.value}
+                          onChange={(e) => updateEditExtraField(bi, si, "value", e.target.value)}
+                          style={{ flex: 1, minWidth: 0, padding: "7px 9px", borderRadius: 7, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12.5 }}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => addEditExtra(bi, si)} style={{ marginLeft: 41, alignSelf: "flex-start", display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: 11 }}>
+                      <Layers size={11} /> Superset / drop set
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button onClick={() => addEditSet(bi)} style={{ marginTop: 9, width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "7px", borderRadius: 7, background: "var(--surface)", border: "1px dashed var(--border)", cursor: "pointer", color: "var(--text-muted)", fontSize: 12, fontWeight: 600 }}>
+              <Plus size={13} /> Add Set
+            </button>
+          </div>
+        ))}
+      </div>
+      <button onClick={addEditBlock} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px", marginBottom: 10, borderRadius: 8, background: "transparent", border: "1px dashed var(--accent)", cursor: "pointer", color: "var(--accent)", fontSize: 12.5, fontWeight: 700 }}>
+        <Plus size={14} /> Add Exercise
+      </button>
+      <div style={{ display: "flex", gap: 8 }}>
+        <button onClick={cancelEditHistory} style={{ flex: 1, padding: "9px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer", border: "1px solid var(--border)", background: "transparent", color: "var(--text-muted)" }}>
+          Cancel
+        </button>
+        <button
+          onClick={() => saveHistoryEdit(editingHistoryId)}
+          disabled={cleanedHistoryEdit.length === 0}
+          style={{ flex: 1, padding: "9px", borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: cleanedHistoryEdit.length === 0 ? "default" : "pointer", border: "none", background: cleanedHistoryEdit.length === 0 ? "var(--surface-2)" : "var(--accent)", color: cleanedHistoryEdit.length === 0 ? "var(--text-muted)" : "var(--on-accent)", boxShadow: cleanedHistoryEdit.length === 0 ? "none" : PRIMARY_SHADOW }}
+        >
+          Save Changes
+        </button>
+      </div>
+          {storageError && <div style={{ fontSize: 12, color: "var(--danger)", marginTop: 10, textAlign: "center" }}>{storageError}</div>}
+        </div>
+      )}
+
       <CompletionQuoteModal quote={completionQuote} onClose={() => setCompletionQuote(null)} />
       </div>
+
+      {tabBarVisible && (
+        <BottomTabBar
+          active={screen === "app" ? "app" : screen === "profile" ? "profile" : "feed"}
+          onSelect={(tab) => {
+            if (tab === "app") { if (activePlan) continueWithCurrentPlan(); else setScreen("app"); }
+            else setScreen(tab);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -241,9 +241,43 @@ applied silently.
 - History stays global across plans (a lifting log is more useful unified
   than split up), just labeled per-entry via `ALL_DAYS_BY_KEY`.
 
-### Home and the Split Builder
+### Navigation: bottom tab bar (replaced the Home screen and History tab)
 
-`HomeScreen` (`App.jsx`) is deliberately minimal: a "Continue with X" card
+The app is organized like Instagram/X: a fixed bottom `BottomTabBar` with
+three tabs, left to right — **Log** (`screen === "app"`), **Feed**
+(`"feed"`, and it's the landing screen), **Profile** (`"profile"`). There is
+no Home screen and no History tab any more (`HomeScreen` and the Log/History
+`view` toggle were deleted).
+
+- The bar shows on `app`, `feed`, `people`, `user`, `profile` only
+  (`tabBarVisible`), and is hidden on setup flows (Split Builder, schedule,
+  plan editor, build plan, add-past-workout, account, the workout editor)
+  and while logging a past workout (`backfill`). `people`/`user` highlight
+  Feed. The page wrapper gets bottom padding for the bar, and the Log tab's
+  sticky Save bar sits above it (`tabBarVisible` → `bottom: 56px + inset`).
+- **Feed** signed out (or with cloud unconfigured) shows a "sign in to see
+  your feed" card — logging works without an account.
+- **Log** with no plan shows a "Choose a Split" card (→ Split Builder).
+- **Manage Split** now lives on the Profile page (a card under Edit
+  Profile / Account & Sync); the Split Builder's Back returns to Profile,
+  as do Add Past Workout, and the backfill Save/Cancel.
+- **History lives on the Profile page.** The profile's "Workouts" list *is*
+  the history: post cards with, per own workout, **Edit** (opens the
+  full-screen `editWorkout` screen — the same editor as before: exercise
+  names, per-set weight/reps, notes, attachment, add/remove sets and
+  exercises, supersets/drop sets, Save Changes disabled if it would leave
+  zero blocks), **Delete** (now with a Keep/Delete confirm, since it sits
+  right next to a tap target), and a dashed **Add Past Workout** button
+  above the list. A workout linked to this week's live Log draft
+  (`liveLinkedHistoryIds`) shows "This week's workout — edit it from the
+  Log tab" instead of Edit, exactly the old rule. The old three-level
+  History accordion (summary → full per-set detail) is gone; the post card's
+  "Show N more exercises" and the editor cover it. The post card does not
+  display attached supersets/drop sets (the editor does).
+
+### Split Builder (formerly reached from Home)
+
+(Historical: `HomeScreen`, since removed, was deliberately minimal: a "Continue with X" card
 (when a plan is active) and one "Manage Split" button. Everything about
 choosing, building, or editing a split — the quiz, the browse list, the
 from-scratch builder, permanent per-day editing, and schedule assignment —
