@@ -88,7 +88,7 @@ export async function declineRequest(myId, followerId) {
 
 // One person's workouts, newest first (RLS decides whether I'm allowed).
 export async function fetchUserWorkouts(userId, offset = 0, limit = 10) {
-  const res = await supabase.from("workouts").select("id,date,day,blocks", { count: "exact" })
+  const res = await supabase.from("workouts").select("id,date,day,blocks,prs", { count: "exact" })
     .eq("user_id", userId).is("deleted_at", null)
     .order("date", { ascending: false }).order("id", { ascending: false })
     .range(offset, offset + limit - 1);
@@ -138,9 +138,74 @@ export async function unblockUser(myId, otherId) {
   must(await supabase.from("blocks").delete().eq("blocker_id", myId).eq("blocked_id", otherId), "Unblocking");
 }
 
-export async function reportUser(myId, targetUserId, workoutId, reason, details) {
+export async function reportUser(myId, targetUserId, workoutId, reason, details, commentId) {
   must(await supabase.from("reports").insert({
     reporter_id: myId, target_user_id: targetUserId, target_workout_id: workoutId || null,
+    target_comment_id: commentId || null,
     reason, details: (details || "").slice(0, 500),
   }), "Reporting");
+}
+
+// --------------------------------------------------------- likes & comments
+export const engagementKey = (owner, id) => `${owner}|${id}`;
+
+// Counts + "did I like it" for a page of posts: Map-like object keyed by engagementKey.
+export async function fetchEngagement(items) {
+  if (!items.length) return {};
+  const rows = must(await supabase.rpc("post_engagement", { p_keys: items.map(({ owner, id }) => ({ owner, id })) }), "Loading reactions") || [];
+  const out = {};
+  rows.forEach((r) => { out[engagementKey(r.workout_owner, r.workout_id)] = { likes: Number(r.like_count), comments: Number(r.comment_count), liked: !!r.liked_by_me }; });
+  return out;
+}
+
+export async function likePost(myId, owner, id) {
+  must(await supabase.from("likes").insert({ workout_owner: owner, workout_id: id, user_id: myId }), "Liking");
+}
+export async function unlikePost(myId, owner, id) {
+  must(await supabase.from("likes").delete().eq("workout_owner", owner).eq("workout_id", id).eq("user_id", myId), "Unliking");
+}
+
+export async function fetchComments(owner, id) {
+  const rows = must(await supabase.from("comments").select("id,author_id,body,created_at").eq("workout_owner", owner).eq("workout_id", id).order("created_at", { ascending: true }).limit(200), "Loading comments") || [];
+  const ids = [...new Set(rows.map((r) => r.author_id))];
+  let authors = {};
+  if (ids.length) {
+    const profiles = must(await supabase.from("profiles").select(PROFILE_COLS).in("id", ids), "Loading comments") || [];
+    authors = Object.fromEntries(profiles.map((p) => [p.id, p]));
+  }
+  return { rows, authors };
+}
+
+export async function addComment(myId, owner, id, body) {
+  const rows = must(await supabase.from("comments").insert({ workout_owner: owner, workout_id: id, author_id: myId, body: body.trim() }).select("id,author_id,body,created_at"), "Commenting") || [];
+  return rows[0];
+}
+export async function deleteComment(commentId) {
+  must(await supabase.from("comments").delete().eq("id", commentId), "Deleting comment");
+}
+
+// ------------------------------------------------------------ notifications
+export async function fetchUnreadCount() {
+  const res = await supabase.from("notifications").select("id", { count: "exact", head: true }).is("read_at", null);
+  must(res, "Loading notifications");
+  return res.count || 0;
+}
+
+export async function fetchNotifications(myId, limit = 40) {
+  const rows = must(await supabase.from("notifications").select("id,actor_id,type,workout_id,body,created_at,read_at").order("created_at", { ascending: false }).limit(limit), "Loading notifications") || [];
+  const actorIds = [...new Set(rows.map((r) => r.actor_id))];
+  const workoutIds = [...new Set(rows.filter((r) => r.workout_id).map((r) => r.workout_id))];
+  const [actors, workouts] = await Promise.all([
+    actorIds.length ? supabase.from("profiles").select(PROFILE_COLS).in("id", actorIds).then((r) => must(r, "Loading notifications") || []) : [],
+    workoutIds.length ? supabase.from("workouts").select("id,date,day").eq("user_id", myId).in("id", workoutIds).then((r) => must(r, "Loading notifications") || []) : [],
+  ]);
+  return {
+    rows,
+    actors: Object.fromEntries(actors.map((p) => [p.id, p])),
+    workouts: Object.fromEntries(workouts.map((w) => [w.id, w])),
+  };
+}
+
+export async function markAllNotificationsRead() {
+  must(await supabase.from("notifications").update({ read_at: new Date().toISOString() }).is("read_at", null), "Marking read");
 }

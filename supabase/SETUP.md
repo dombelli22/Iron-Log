@@ -36,3 +36,11 @@ password resets won't reach other people. Use your own sender:
    Enable custom SMTP: host `smtp.resend.com`, port `465`, username `resend`,
    password = the API key, sender email = an address on your verified domain.
 3. Send yourself a password reset to confirm delivery.
+
+## Likes, comments, notifications, PR badges
+
+8. SQL Editor -> New query -> paste all of `supabase/engagement.sql` -> Run.
+   Run it **before** deploying the app version that uses it: the app starts
+   uploading a `prs` column with each workout, and syncing errors until that
+   column exists. If you ever re-run `social.sql`, re-run `engagement.sql`
+   after it (it redefines the feed function to include PR badges).

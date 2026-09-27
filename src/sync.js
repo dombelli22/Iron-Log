@@ -74,7 +74,12 @@ function mergeValues(baseRaw, overRaw) {
   return overRaw;
 }
 
-export function createSync({ client, store, isOnline = () => true, debounceMs = 1500, setTimer = setTimeout, clearTimer = clearTimeout }) {
+// `decorate(history)` (optional) returns Map(workoutId -> extra columns, e.g. { prs })
+// stored alongside each workout for other people's screens. DECORATE_REV bumps
+// when what it adds changes, forcing one re-upload of everything.
+const DECORATE_REV = 1;
+
+export function createSync({ client, store, decorate = null, isOnline = () => true, debounceMs = 1500, setTimer = setTimeout, clearTimer = clearTimeout }) {
   let user = null;
   let running = null; // the in-flight run, so runs never overlap
   let rerun = false;
@@ -217,19 +222,26 @@ export function createSync({ client, store, isOnline = () => true, debounceMs = 
     // ---- workouts
     const local = parse(store.get(HISTORY_KEY), []);
     const localIds = new Set(local.map((w) => String(w.id)));
+    const extras = decorate ? decorate(local) : null;
+    const forceAll = !!decorate && meta.decorateRev !== DECORATE_REV;
     const dirty = local.filter((w) => {
       const s = meta.hist[String(w.id)];
-      return !s || s.h !== hashStr(canonWorkout(w));
+      return forceAll || !s || s.h !== hashStr(canonWorkout(w));
     });
     for (let i = 0; i < dirty.length; i += PUSH_BATCH) {
       const batch = dirty.slice(i, i + PUSH_BATCH);
-      const rows = batch.map((w) => ({ user_id: uid, id: String(w.id), date: w.date, day: w.day, blocks: w.blocks || [], deleted_at: null }));
+      const rows = batch.map((w) => {
+        const row = { user_id: uid, id: String(w.id), date: w.date, day: w.day, blocks: w.blocks || [], deleted_at: null };
+        if (extras) Object.assign(row, extras.get(String(w.id)) || { prs: [] });
+        return row;
+      });
       const res = await client.from("workouts").upsert(rows, { onConflict: "user_id,id" }).select("id,updated_at");
       const saved = unwrap(res, "Saving workouts") || [];
       const at = new Map(saved.map((r) => [String(r.id), Date.parse(r.updated_at)]));
       batch.forEach((w) => { meta.hist[String(w.id)] = { h: hashStr(canonWorkout(w)), at: at.get(String(w.id)) || Date.now() }; });
       saveMeta(meta);
     }
+    if (forceAll) { meta.decorateRev = DECORATE_REV; saveMeta(meta); }
     const gone = Object.keys(meta.hist).filter((id) => !localIds.has(id));
     for (let i = 0; i < gone.length; i += PUSH_BATCH) {
       const ids = gone.slice(i, i + PUSH_BATCH);

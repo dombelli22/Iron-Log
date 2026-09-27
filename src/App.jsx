@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Dumbbell, Plus, Trash2, ChevronDown, Save, X, Loader2, History as HistoryIcon, RotateCcw, Timer, TrendingUp, Layers, Home as HomeIcon, Pencil, User as UserIcon } from "lucide-react";
+import { Dumbbell, Plus, Trash2, ChevronDown, Save, X, Loader2, History as HistoryIcon, RotateCcw, Timer, TrendingUp, Layers, Home as HomeIcon, Pencil, User as UserIcon, Heart, MessageCircle, Bell } from "lucide-react";
 import { storage } from "./storage";
-import { getMyAccount, saveMyAccount, searchPeople, getPublicProfile, getFollowCounts, getFollowStatus, follow, unfollow, getPendingRequests, approveRequest, declineRequest, fetchUserWorkouts, fetchHomeFeed, friendlySocialError, USERNAME_RE, REPORT_REASONS, getBlockedIds, getBlockedProfiles, blockUser, unblockUser, reportUser } from "./social";
+import { getMyAccount, saveMyAccount, searchPeople, getPublicProfile, getFollowCounts, getFollowStatus, follow, unfollow, getPendingRequests, approveRequest, declineRequest, fetchUserWorkouts, fetchHomeFeed, friendlySocialError, USERNAME_RE, REPORT_REASONS, getBlockedIds, getBlockedProfiles, blockUser, unblockUser, reportUser, engagementKey, fetchEngagement, likePost, unlikePost, fetchComments, addComment, deleteComment, fetchUnreadCount, fetchNotifications, markAllNotificationsRead } from "./social";
 import { CONTACT_EMAIL } from "./appConfig";
+import { computeSessionPRs } from "./prs";
 import { useCloud, sync, signIn, signUp, signOut, resetPassword, setNewPassword, dismissRecovery, deleteAccount } from "./cloud";
 import { PLAN_LIBRARY, ALL_DAYS_BY_KEY, WEEKDAYS, getScheduledDay, GLOBAL_SLOT_LIBRARY, GLOBAL_SLOT_NAMES, GLOBAL_EXERCISE_LIST, GENERIC_BODY_PARTS } from "./plans";
 import BodyModel from "react-body-highlighter";
@@ -844,35 +845,6 @@ function summarizeSets(block) {
     .join(", ");
 }
 
-// For each saved session, which lifts beat the lifter's previous best *as of
-// that day* — replayed oldest→newest, so a session keeps its PR badge even
-// after you've since gone heavier. A first-ever log of an exercise isn't a PR
-// (there was nothing to beat).
-function computeSessionPRs(history) {
-  const ordered = history.map((s, i) => ({ s, i })).sort((a, b) => a.s.date.localeCompare(b.s.date) || a.i - b.i);
-  const bests = {};
-  const out = {};
-  ordered.forEach(({ s }) => {
-    const sessionBest = {};
-    (s.blocks || []).forEach((b) => {
-      if (b.type !== "reps") return;
-      b.sets.forEach((st) => {
-        if (!(st.weight > 0)) return;
-        const cur = sessionBest[b.exercise];
-        if (!cur || st.weight > cur.weight || (st.weight === cur.weight && st.value > cur.value)) sessionBest[b.exercise] = { exercise: b.exercise, weight: st.weight, value: st.value };
-      });
-    });
-    const prs = [];
-    Object.values(sessionBest).forEach((sb) => {
-      const prev = bests[sb.exercise];
-      if (prev && (sb.weight > prev.weight || (sb.weight === prev.weight && sb.value > prev.value))) prs.push(sb);
-      if (!prev || sb.weight > prev.weight || (sb.weight === prev.weight && sb.value > prev.value)) bests[sb.exercise] = sb;
-    });
-    out[s.id] = prs;
-  });
-  return out;
-}
-
 function sessionTotals(blocks) {
   let volume = 0;
   let sets = 0;
@@ -1236,7 +1208,7 @@ function AccountScreen({ onBack, profile, onOpenLegal, onDeleted }) {
   );
 }
 
-function ProfileScreen({ profile, stats, history, dayLabelFor, onSave, onBack, onOpenAccount, onManageSplit, activePlanName, onAddPast, onEditSession, onDeleteSession, canEditSession }) {
+function ProfileScreen({ me, profile, stats, history, dayLabelFor, onSave, onBack, onOpenAccount, onManageSplit, activePlanName, onAddPast, onEditSession, onDeleteSession, canEditSession }) {
   const cloud = useCloud();
   const hasProfile = !!(profile && profile.displayName);
   const [editing, setEditing] = useState(!hasProfile);
@@ -1249,6 +1221,7 @@ function ProfileScreen({ profile, stats, history, dayLabelFor, onSave, onBack, o
   // Newest first; same-date sessions keep most-recently-logged on top (same rule as History).
   const feed = useMemo(() => [...history].reverse().sort((a, b) => b.date.localeCompare(a.date)), [history]);
   const prsBySession = useMemo(() => computeSessionPRs(history), [history]);
+  const eng = useEngagement(me, feed.slice(0, feedCount).map((session) => ({ owner: me ? me.id : "", id: session.id })));
 
   async function pickPhoto(e) {
     const file = e.target.files && e.target.files[0];
@@ -1415,6 +1388,7 @@ function ProfileScreen({ profile, stats, history, dayLabelFor, onSave, onBack, o
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {feed.slice(0, feedCount).map((session) => (
             <WorkoutPostCard key={session.id} author={profile} session={session} dayLabel={dayLabelFor(session)} prs={prsBySession[session.id] || []}
+              actions={me ? <PostEngagement me={me} owner={me.id} id={session.id} eng={eng} /> : null}
               isOpen={openPostId === session.id} onToggle={() => setOpenPostId(openPostId === session.id ? null : session.id)}
               footer={
                 confirmDeleteId === session.id ? (
@@ -1457,7 +1431,7 @@ function ProfileScreen({ profile, stats, history, dayLabelFor, onSave, onBack, o
 // see what is enforced by the database, so a screen here just shows whatever
 // comes back (and a friendly "private" note when nothing does).
 // ---------------------------------------------------------------------------
-function WorkoutPostCard({ author, session, dayLabel, prs = [], isOpen, onToggle, onOpenAuthor, onReport, footer }) {
+function WorkoutPostCard({ author, session, dayLabel, prs = [], isOpen, onToggle, onOpenAuthor, onReport, actions, footer }) {
   const blocks = session.blocks || [];
   const totals = sessionTotals(blocks);
   const shown = isOpen ? blocks : blocks.slice(0, FEED_PREVIEW_EXERCISES);
@@ -1505,6 +1479,7 @@ function WorkoutPostCard({ author, session, dayLabel, prs = [], isOpen, onToggle
         <span><span className="tabular" style={{ color: "var(--text)", fontWeight: 700 }}>{totals.sets}</span> sets</span>
         <span><span className="tabular" style={{ color: "var(--text)", fontWeight: 700 }}>{blocks.length}</span> exercises</span>
       </div>
+      {actions && <div style={{ marginTop: 6, paddingTop: 4, borderTop: "1px solid var(--border)" }}>{actions}</div>}
       {footer && <div style={{ marginTop: 10 }}>{footer}</div>}
     </div>
   );
@@ -1516,6 +1491,206 @@ const toAuthor = (p) => ({ id: p.id, username: p.username, displayName: p.displa
 const socialShell = { padding: "calc(24px + env(safe-area-inset-top)) 16px calc(60px + env(safe-area-inset-bottom))", maxWidth: 520, margin: "0 auto" };
 const socialLabel = { fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700, marginBottom: 10 };
 const smallBtn = (primary) => ({ padding: "8px 14px", borderRadius: 999, fontSize: 12.5, fontWeight: 700, cursor: "pointer", border: primary ? "none" : "1px solid var(--border)", background: primary ? "var(--accent)" : "var(--surface-2)", color: primary ? "var(--on-accent)" : "var(--text)", flexShrink: 0 });
+
+// ---------------------------------------------------------------------------
+// Likes, comments, notifications.
+// ---------------------------------------------------------------------------
+function timeAgo(iso) {
+  const sec = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (sec < 60) return "now";
+  if (sec < 3600) return `${Math.floor(sec / 60)}m`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)}h`;
+  if (sec < 86400 * 7) return `${Math.floor(sec / 86400)}d`;
+  return fmtDate(iso.slice(0, 10));
+}
+
+// Like/comment counts for a page of posts, loaded in one request and updated
+// optimistically when you like something.
+function useEngagement(me, items) {
+  const [map, setMap] = useState({});
+  const sig = items.map((i) => engagementKey(i.owner, i.id)).join(",");
+  useEffect(() => {
+    if (!me) return undefined;
+    const missing = items.filter((i) => !(engagementKey(i.owner, i.id) in map));
+    if (!missing.length) return undefined;
+    let cancelled = false;
+    fetchEngagement(missing).then((r) => { if (!cancelled) setMap((prev) => ({ ...prev, ...r })); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [sig, me && me.id]);
+  const get = (owner, id) => map[engagementKey(owner, id)] || null;
+  async function toggleLike(owner, id) {
+    const k = engagementKey(owner, id);
+    const cur = map[k] || { likes: 0, comments: 0, liked: false };
+    setMap((prev) => ({ ...prev, [k]: { ...cur, liked: !cur.liked, likes: Math.max(0, cur.likes + (cur.liked ? -1 : 1)) } }));
+    try { if (cur.liked) await unlikePost(me.id, owner, id); else await likePost(me.id, owner, id); }
+    catch (e) { setMap((prev) => ({ ...prev, [k]: cur })); }
+  }
+  const bumpComments = (owner, id, delta) => setMap((prev) => {
+    const k = engagementKey(owner, id);
+    const c = prev[k] || { likes: 0, comments: 0, liked: false };
+    return { ...prev, [k]: { ...c, comments: Math.max(0, c.comments + delta) } };
+  });
+  return { get, toggleLike, bumpComments };
+}
+
+function CommentThread({ me, owner, workoutId, onDelta }) {
+  const [rows, setRows] = useState(undefined);
+  const [authors, setAuthors] = useState({});
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [reporting, setReporting] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetchComments(owner, workoutId).then((r) => { if (!cancelled) { setRows(r.rows); setAuthors(r.authors); } })
+      .catch((e) => { if (!cancelled) { setRows([]); setError(friendlySocialError(e)); } });
+    return () => { cancelled = true; };
+  }, [owner, workoutId]);
+  async function send() {
+    if (!text.trim() || busy) return;
+    setBusy(true); setError("");
+    try {
+      const c = await addComment(me.id, owner, workoutId, text);
+      setRows((prev) => [...(prev || []), c]);
+      setText(""); onDelta(1);
+      if (!authors[me.id]) setAuthors((prev) => ({ ...prev, [me.id]: { id: me.id, display_name: "You" } }));
+    } catch (e) { setError(friendlySocialError(e)); }
+    setBusy(false);
+  }
+  async function remove(c) {
+    try { await deleteComment(c.id); setRows((prev) => prev.filter((x) => x.id !== c.id)); onDelta(-1); }
+    catch (e) { setError(friendlySocialError(e)); }
+  }
+  return (
+    <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)" }}>
+      {rows === undefined && <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Loading…</div>}
+      {rows && rows.length === 0 && <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8 }}>No comments yet.</div>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 10 }}>
+        {(rows || []).map((c) => {
+          const a = authors[c.author_id];
+          const author = a ? toAuthor(a) : { displayName: "Someone", photo: "" };
+          const mine = c.author_id === me.id;
+          return (
+            <div key={c.id} style={{ display: "flex", gap: 8 }}>
+              <Avatar profile={author} size={26} />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 12.5, lineHeight: 1.4, overflowWrap: "anywhere" }}>
+                  <span style={{ fontWeight: 700 }}>{mine ? "You" : author.displayName}</span>{" "}
+                  <span style={{ color: "var(--text-muted)", fontSize: 11 }}>{timeAgo(c.created_at)}</span>
+                </div>
+                <div style={{ fontSize: 13, lineHeight: 1.45, overflowWrap: "anywhere" }}>{c.body}</div>
+                <div style={{ display: "flex", gap: 14, marginTop: 2 }}>
+                  {(mine || owner === me.id) && <button onClick={() => remove(c)} style={{ background: "none", border: "none", padding: "4px 0", cursor: "pointer", color: "var(--text-muted)", fontSize: 11.5 }}>Delete</button>}
+                  {!mine && <button onClick={() => setReporting(c)} style={{ background: "none", border: "none", padding: "4px 0", cursor: "pointer", color: "var(--text-muted)", fontSize: 11.5 }}>Report</button>}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <input type="text" value={text} maxLength={300} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") send(); }} placeholder="Add a comment…"
+          style={{ flex: 1, minWidth: 0, padding: "10px 12px", borderRadius: 10, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 14 }} />
+        <button onClick={send} disabled={!text.trim() || busy} style={{ ...smallBtn(true), opacity: text.trim() && !busy ? 1 : 0.5, cursor: text.trim() && !busy ? "pointer" : "not-allowed" }}>Post</button>
+      </div>
+      {error && <div style={{ fontSize: 12, color: "var(--danger)", marginTop: 8 }}>{error}</div>}
+      {reporting && <ReportSheet label="this comment" onClose={() => setReporting(null)} onSubmit={(reason, details) => reportUser(me.id, reporting.author_id, workoutId, reason, details, reporting.id)} />}
+    </div>
+  );
+}
+
+// Heart + comment buttons under a post; the comment thread opens inline.
+function PostEngagement({ me, owner, id, eng }) {
+  const [open, setOpen] = useState(false);
+  const e = eng.get(owner, id) || { likes: 0, comments: 0, liked: false };
+  const btn = { display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", cursor: "pointer", padding: "8px 14px 8px 0", fontSize: 13, color: "var(--text-muted)" };
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center" }}>
+        <button onClick={() => eng.toggleLike(owner, id)} aria-label={e.liked ? "Unlike" : "Like"} aria-pressed={e.liked} style={{ ...btn, color: e.liked ? "var(--accent)" : "var(--text-muted)" }}>
+          <Heart size={18} fill={e.liked ? "var(--accent)" : "none"} /> <span className="tabular">{e.likes || ""}</span>
+        </button>
+        <button onClick={() => setOpen((o) => !o)} aria-label="Comments" aria-expanded={open} style={{ ...btn, color: open ? "var(--text)" : "var(--text-muted)" }}>
+          <MessageCircle size={18} /> <span className="tabular">{e.comments || ""}</span>
+        </button>
+      </div>
+      {open && <CommentThread me={me} owner={owner} workoutId={id} onDelta={(d) => eng.bumpComments(owner, id, d)} />}
+    </div>
+  );
+}
+
+function NotificationsScreen({ me, dayLabelFor, onOpenUser, onOpenMine, onRead, onBack }) {
+  const [data, setData] = useState(undefined);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const d = await fetchNotifications(me.id);
+        if (cancelled) return;
+        setData(d);
+        if (d.rows.some((r) => !r.read_at)) { await markAllNotificationsRead(); onRead(); }
+      } catch (e) { if (!cancelled) { setData({ rows: [], actors: {}, workouts: {} }); setError(friendlySocialError(e)); } }
+    })();
+    return () => { cancelled = true; };
+  }, [me.id]);
+
+  async function answer(row, ok) {
+    try {
+      if (ok) await approveRequest(me.id, row.actor_id); else await declineRequest(me.id, row.actor_id);
+      setData((d) => ({ ...d, rows: d.rows.filter((r) => r.id !== row.id) }));
+    } catch (e) { setError(friendlySocialError(e)); }
+  }
+
+  const describe = (r) => {
+    const a = data.actors[r.actor_id];
+    const name = a ? toAuthor(a).displayName : "Someone";
+    const w = r.workout_id ? data.workouts[r.workout_id] : null;
+    const which = w ? `your ${dayLabelFor(w)} workout from ${fmtDate(w.date)}` : "your workout";
+    if (r.type === "follow") return { text: <><b>{name}</b> started following you</>, go: () => a && onOpenUser(a.id) };
+    if (r.type === "request") return { text: <><b>{name}</b> wants to follow you</>, go: () => a && onOpenUser(a.id) };
+    if (r.type === "request_accepted") return { text: <><b>{name}</b> accepted your follow request</>, go: () => a && onOpenUser(a.id) };
+    if (r.type === "like") return { text: <><b>{name}</b> liked {which}</>, go: onOpenMine };
+    return { text: <><b>{name}</b> commented on {which}{r.body ? <>: <span style={{ color: "var(--text-muted)" }}>“{r.body}”</span></> : null}</>, go: onOpenMine };
+  };
+
+  return (
+    <div style={socialShell}>
+      <button onClick={onBack} style={backLinkStyle}>‹ Back</button>
+      <div className="display" style={{ fontSize: 18, marginBottom: 16 }}>Notifications</div>
+      {data === undefined && <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Loading…</div>}
+      {error && <div style={{ fontSize: 12.5, color: "var(--danger)", marginBottom: 12 }}>{error}</div>}
+      {data && data.rows.length === 0 && !error && (
+        <div style={{ fontSize: 13, color: "var(--text-muted)", textAlign: "center", padding: "32px 0", lineHeight: 1.5 }}>Nothing yet. New followers, likes and comments show up here.</div>
+      )}
+      {data && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {data.rows.map((r) => {
+            const d = describe(r);
+            const a = data.actors[r.actor_id];
+            return (
+              <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 12px", borderRadius: 12, background: r.read_at ? "var(--surface)" : "var(--accent-dim)", border: "1px solid " + (r.read_at ? "var(--border)" : "var(--accent)") }}>
+                <button onClick={d.go} style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", color: "var(--text)" }}>
+                  <Avatar profile={a ? toAuthor(a) : { displayName: "?", photo: "" }} size={38} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, lineHeight: 1.4, overflowWrap: "anywhere" }}>{d.text}</div>
+                    <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{timeAgo(r.created_at)}</div>
+                  </div>
+                </button>
+                {r.type === "request" && (
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button onClick={() => answer(r, true)} style={smallBtn(true)}>Accept</button>
+                    <button onClick={() => answer(r, false)} style={smallBtn(false)}>Decline</button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function PersonRow({ person, onOpen, right }) {
   const a = toAuthor(person);
@@ -1534,7 +1709,7 @@ function PersonRow({ person, onOpen, right }) {
 }
 
 // Instagram-style bottom bar: Log, Feed, Profile (left to right).
-function BottomTabBar({ active, onSelect }) {
+function BottomTabBar({ active, onSelect, feedBadge }) {
   const tabs = [["app", "Log", Dumbbell], ["feed", "Feed", HomeIcon], ["profile", "Profile", UserIcon]];
   return (
     <nav style={{ position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 30, background: "var(--bg)", borderTop: "1px solid var(--border)", paddingBottom: "env(safe-area-inset-bottom)" }}>
@@ -1544,7 +1719,10 @@ function BottomTabBar({ active, onSelect }) {
           return (
             <button key={key} onClick={() => onSelect(key)} aria-current={on ? "page" : undefined}
               style={{ flex: 1, height: 56, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, background: "none", border: "none", cursor: "pointer", color: on ? "var(--accent)" : "var(--text-muted)" }}>
-              <Icon size={21} strokeWidth={on ? 2.4 : 1.8} />
+              <span style={{ position: "relative", display: "flex" }}>
+                <Icon size={21} strokeWidth={on ? 2.4 : 1.8} />
+                {key === "feed" && feedBadge > 0 && <span style={{ position: "absolute", top: -3, right: -6, width: 9, height: 9, borderRadius: "50%", background: "var(--accent)", border: "2px solid var(--bg)" }} />}
+              </span>
               <span style={{ fontSize: 10.5, fontWeight: on ? 700 : 500, letterSpacing: "0.02em" }}>{label}</span>
             </button>
           );
@@ -1554,7 +1732,7 @@ function BottomTabBar({ active, onSelect }) {
   );
 }
 
-function FeedScreen({ me, configured, dayLabelFor, onOpenUser, onFindPeople, onOpenAccount }) {
+function FeedScreen({ me, configured, dayLabelFor, onOpenUser, onFindPeople, onOpenAccount, unread, onOpenNotifications }) {
   if (!me) {
     return (
       <div style={socialShell}>
@@ -1574,10 +1752,10 @@ function FeedScreen({ me, configured, dayLabelFor, onOpenUser, onFindPeople, onO
       </div>
     );
   }
-  return <SignedInFeed me={me} dayLabelFor={dayLabelFor} onOpenUser={onOpenUser} onFindPeople={onFindPeople} onOpenAccount={onOpenAccount} />;
+  return <SignedInFeed me={me} dayLabelFor={dayLabelFor} onOpenUser={onOpenUser} onFindPeople={onFindPeople} onOpenAccount={onOpenAccount} unread={unread} onOpenNotifications={onOpenNotifications} />;
 }
 
-function SignedInFeed({ me, dayLabelFor, onOpenUser, onFindPeople, onOpenAccount }) {
+function SignedInFeed({ me, dayLabelFor, onOpenUser, onFindPeople, onOpenAccount, unread, onOpenNotifications }) {
   const [account, setAccount] = useState(undefined);
   const [posts, setPosts] = useState([]);
   const [authors, setAuthors] = useState({});
@@ -1587,6 +1765,7 @@ function SignedInFeed({ me, dayLabelFor, onOpenUser, onFindPeople, onOpenAccount
   const [openId, setOpenId] = useState(null);
   const [pending, setPending] = useState(0);
   const [reporting, setReporting] = useState(null); // the post being reported
+  const eng = useEngagement(me, posts.map((w) => ({ owner: w.user_id, id: w.id })));
 
   async function loadPage(cursor) {
     setLoading(true); setError("");
@@ -1621,7 +1800,13 @@ function SignedInFeed({ me, dayLabelFor, onOpenUser, onFindPeople, onOpenAccount
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 16 }}>
         <div className="display" style={{ fontSize: 18 }}>Feed</div>
         {account && account.username && (
-          <button onClick={onFindPeople} style={smallBtn(false)}>Find People{pending > 0 ? ` · ${pending}` : ""}</button>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button onClick={onOpenNotifications} aria-label={unread > 0 ? `Notifications, ${unread} new` : "Notifications"} style={{ ...smallBtn(false), position: "relative", padding: "8px 11px", display: "flex", alignItems: "center" }}>
+              <Bell size={16} />
+              {unread > 0 && <span style={{ position: "absolute", top: -5, right: -5, minWidth: 17, height: 17, padding: "0 4px", borderRadius: 9, background: "var(--accent)", color: "var(--on-accent)", fontSize: 10.5, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>{unread > 9 ? "9+" : unread}</span>}
+            </button>
+            <button onClick={onFindPeople} style={smallBtn(false)}>Find People{pending > 0 ? ` · ${pending}` : ""}</button>
+          </div>
         )}
       </div>
 
@@ -1654,7 +1839,8 @@ function SignedInFeed({ me, dayLabelFor, onOpenUser, onFindPeople, onOpenAccount
               if (!p) return null;
               const key = `${w.user_id}|${w.id}`;
               return (
-                <WorkoutPostCard key={key} author={toAuthor(p)} session={w} dayLabel={dayLabelFor(w)} isOpen={openId === key}
+                <WorkoutPostCard key={key} author={toAuthor(p)} session={w} dayLabel={dayLabelFor(w)} prs={w.prs || []} isOpen={openId === key}
+                  actions={<PostEngagement me={me} owner={w.user_id} id={w.id} eng={eng} />}
                   onToggle={() => setOpenId(openId === key ? null : key)} onOpenAuthor={() => onOpenUser(w.user_id)} onReport={() => setReporting(w)} />
               );
             })}
@@ -1749,6 +1935,7 @@ function UserProfileScreen({ me, userId, dayLabelFor, onBack }) {
   const [blocked, setBlocked] = useState(false);
   const [confirmBlock, setConfirmBlock] = useState(false);
   const [reporting, setReporting] = useState(false);
+  const eng = useEngagement(me, workouts.map((w) => ({ owner: userId, id: w.id })));
 
   async function loadWorkouts(offset) {
     setWLoading(true);
@@ -1858,7 +2045,8 @@ function UserProfileScreen({ me, userId, dayLabelFor, onBack }) {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {workouts.map((w) => (
-                <WorkoutPostCard key={w.id} author={author} session={w} dayLabel={dayLabelFor(w)} isOpen={openId === w.id} onToggle={() => setOpenId(openId === w.id ? null : w.id)} />
+                <WorkoutPostCard key={w.id} author={author} session={w} dayLabel={dayLabelFor(w)} prs={w.prs || []} isOpen={openId === w.id} onToggle={() => setOpenId(openId === w.id ? null : w.id)}
+                  actions={<PostEngagement me={me} owner={userId} id={w.id} eng={eng} />} />
               ))}
               {wLoading && <div style={{ fontSize: 12.5, color: "var(--text-muted)", textAlign: "center" }}>Loading…</div>}
               {!wLoading && workouts.length < total && (
@@ -3052,6 +3240,17 @@ export default function WorkoutTracker() {
   const [viewUserId, setViewUserId] = useState(null);
   const [accountBack, setAccountBack] = useState("profile");
   const [legalTab, setLegalTab] = useState("terms");
+  const [unread, setUnread] = useState(0);
+  useEffect(() => {
+    if (!cloudState.user) { setUnread(0); return undefined; }
+    let cancelled = false;
+    const load = () => fetchUnreadCount().then((n) => { if (!cancelled) setUnread(n); }).catch(() => {});
+    load();
+    const timer = setInterval(load, 60000);
+    const onVis = () => { if (document.visibilityState === "visible") load(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { cancelled = true; clearInterval(timer); document.removeEventListener("visibilitychange", onVis); };
+  }, [cloudState.user && cloudState.user.id, screen]);
   const [userBack, setUserBack] = useState("feed");
   useEffect(() => sync.onRemoteApplied(() => setDataVersion((v) => v + 1)), []);
 
@@ -3438,7 +3637,7 @@ export default function WorkoutTracker() {
   const editingSession = editingHistoryId ? history.find((h) => h.id === editingHistoryId) : null;
   // The bottom Log / Feed / Profile bar shows on the main screens only — not on
   // setup flows, the workout editor, or while logging a past workout.
-  const tabBarVisible = ["app", "feed", "people", "user", "profile"].includes(screen) && !backfill && !cloudState.recovery;
+  const tabBarVisible = ["app", "feed", "people", "user", "profile", "notifications"].includes(screen) && !backfill && !cloudState.recovery;
 
   // Starts logging a past workout: either one of the active plan's own days
   // (dayKey is a real key from workoutData) or a session that doesn't match
@@ -4094,7 +4293,7 @@ export default function WorkoutTracker() {
   // screen, not the exact screen — schedule/build/backfill-setup share one
   // (they're all secondary setup flows) so this stays 4 images, not 6+.
   const bgImage =
-    screen === "feed" || screen === "people" || screen === "user" ? "home" : screen === "app" ? "log" : screen === "profile" ? "history" : "utility";
+    screen === "feed" || screen === "people" || screen === "user" || screen === "notifications" ? "home" : screen === "app" ? "log" : screen === "profile" ? "history" : "utility";
 
   return (
     <div style={{ background: "var(--bg)", minHeight: "100%", color: "var(--text)", fontFamily: "'Inter', sans-serif" }}>
@@ -4130,6 +4329,7 @@ export default function WorkoutTracker() {
       <div style={{ position: "relative", zIndex: 1, paddingBottom: tabBarVisible ? "calc(56px + env(safe-area-inset-bottom))" : 0 }}>
       {screen === "profile" && (
         <ProfileScreen
+          me={cloudState.user}
           profile={profile}
           stats={profileStats}
           history={history}
@@ -4159,7 +4359,13 @@ export default function WorkoutTracker() {
       {screen === "feed" && (
         <FeedScreen me={cloudState.user} configured={cloudState.configured} dayLabelFor={socialDayLabel}
           onOpenUser={(id) => { setViewUserId(id); setUserBack("feed"); setScreen("user"); }}
-          onFindPeople={() => setScreen("people")} onOpenAccount={() => { setAccountBack("feed"); setScreen("account"); }} />
+          onFindPeople={() => setScreen("people")} onOpenAccount={() => { setAccountBack("feed"); setScreen("account"); }}
+          unread={unread} onOpenNotifications={() => setScreen("notifications")} />
+      )}
+      {screen === "notifications" && cloudState.user && (
+        <NotificationsScreen me={cloudState.user} dayLabelFor={socialDayLabel}
+          onOpenUser={(id) => { setViewUserId(id); setUserBack("notifications"); setScreen("user"); }}
+          onOpenMine={() => setScreen("profile")} onRead={() => setUnread(0)} onBack={() => setScreen("feed")} />
       )}
       {screen === "people" && cloudState.user && (
         <PeopleScreen me={cloudState.user} onOpenUser={(id) => { setViewUserId(id); setUserBack("people"); setScreen("user"); }} onBack={() => setScreen("feed")} />
@@ -5080,6 +5286,7 @@ export default function WorkoutTracker() {
 
       {tabBarVisible && (
         <BottomTabBar
+          feedBadge={unread}
           active={screen === "app" ? "app" : screen === "profile" ? "profile" : "feed"}
           onSelect={(tab) => {
             if (tab === "app") { if (activePlan) continueWithCurrentPlan(); else setScreen("app"); }

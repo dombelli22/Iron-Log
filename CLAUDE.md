@@ -912,9 +912,9 @@ just says cloud accounts aren't on — nothing else changes.
   `SetPasswordScreen` (new + confirm password → `setNewPassword`; "Skip for
   now" → `dismissRecovery`). Only exercised end-to-end with a real reset
   email; in development the event was simulated.
-- Not yet built (roadmap): likes/comments/notifications, PR chips and stats
-  on *other* people's profiles. (Safety — block, report, delete account,
-  Terms/Privacy — is built; see the next subsection.)
+- Not yet built (roadmap): stats tiles on *other* people's profiles, phone
+  push notifications, a moderation UI. (Safety and engagement are built; see
+  the next two subsections.)
 
 ### Social: usernames, follows, feed
 
@@ -996,6 +996,43 @@ components in `App.jsx`.
   that reason; new full-screen overlays must too.
 - Email: Supabase's built-in sender is rate-limited; see `supabase/SETUP.md`
   for the custom-SMTP (Resend) steps needed before others sign up.
+
+### Engagement: likes, comments, notifications, PR badges
+
+Fourth SQL file, [supabase/engagement.sql](supabase/engagement.sql) (run after
+`safety.sql`; idempotent; if `social.sql` is ever re-run, re-run this one
+last). 13 more PGlite scenarios cover it (36 total across both harnesses).
+
+- **Likes / comments** are keyed by `(workout_owner, workout_id)` with a FK
+  to `workouts` (cascade). RLS ties both to `can_view_workouts()` — you can
+  only react to what you can see, and if the owner stops sharing or a block
+  happens they vanish for the other person (still visible to the owner).
+  Inserts also require the workout to be live (`workout_is_live`, not
+  soft-deleted). Comments: 1–300 chars, no editing; the author *or the
+  workout's owner* can delete. Each comment has a Report link
+  (`reports.target_comment_id`).
+- **Notifications** are created only by triggers (follow/request/approve/
+  like/comment; never for your own actions; like→unlike→like doesn't pile
+  up; deleting a comment or unfollowing removes its notification). Recipients
+  can read/mark-read/clear their own; notifications from someone who's blocked
+  either way are hidden. In-app only — no phone push yet.
+- `post_engagement(p_keys)` (security invoker, one call per page of posts)
+  returns like/comment counts and "liked by me"; `useEngagement()` in
+  `App.jsx` caches it and updates optimistically. `PostEngagement` renders
+  the heart/comment buttons with an inline `CommentThread`.
+- **Unread badge**: `unread` state in `WorkoutTracker` polls
+  `fetchUnreadCount()` every 60s / on tab focus / on screen change; shown on
+  the Feed header bell and as a dot on the Feed tab. `NotificationsScreen`
+  marks everything read on open (rows fetched first, so unread ones still
+  show highlighted). Requests can be accepted/declined right there.
+- **PR badges**: `workouts.prs` (top 3 `{exercise, weight, value}`) is filled
+  by the sync engine's `decorate` hook (`prsForSync` in `src/prs.js`, which
+  also now owns `computeSessionPRs`). Bumping `DECORATE_REV` in `sync.js`
+  forces one re-upload of everything (that's how existing workouts got their
+  badges). A workout's stored PRs are as of its last upload, so editing an
+  *earlier* workout later can leave a later one's badge stale until it's next
+  saved — accepted. Feed and profile reads carry `prs`, so other people's
+  posts show the same "New PR" chips as your own.
 
 ## Visual design conventions
 

@@ -5,6 +5,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "./supabaseConfig";
 import { createSync } from "./sync";
+import { prsForSync } from "./prs";
 import { setWriteListener } from "./storage";
 
 export const cloudConfigured = Boolean(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY);
@@ -22,6 +23,10 @@ export const supabase = cloudConfigured
 export const sync = createSync({
   client: supabase,
   store: lsStore,
+  decorate: (history) => {
+    const prs = prsForSync(history);
+    return new Map([...prs].map(([id, list]) => [id, { prs: list }]));
+  },
   isOnline: () => (typeof navigator === "undefined" ? true : navigator.onLine !== false),
 });
 

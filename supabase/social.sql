@@ -123,7 +123,9 @@ $$;
 -- after the day they turned sharing on ("as they are posted"). Older workouts
 -- are reachable only from that person's profile page. Newest first; page with
 -- the last row's date and user_id||'|'||id.
-create or replace function public.home_feed(p_limit int default 20, p_before_date text default null, p_before_key text default null)
+-- (engagement.sql later redefines this to also return PR badges; re-run that one last.)
+drop function if exists public.home_feed(int, text, text);
+create function public.home_feed(p_limit int default 20, p_before_date text default null, p_before_key text default null)
 returns table (user_id uuid, id text, date text, day text, blocks jsonb, updated_at timestamptz)
 language sql stable security invoker set search_path = '' as $$
   select w.user_id, w.id, w.date, w.day, w.blocks, w.updated_at
