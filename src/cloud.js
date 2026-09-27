@@ -15,7 +15,7 @@ const lsStore = {
   remove(k) { try { localStorage.removeItem("ironlog:" + k); } catch (e) { /* ignore */ } },
 };
 
-const supabase = cloudConfigured
+export const supabase = cloudConfigured
   ? createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } })
   : null;
 

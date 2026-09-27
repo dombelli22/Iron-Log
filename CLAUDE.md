@@ -878,8 +878,50 @@ just says cloud accounts aren't on — nothing else changes.
   `SetPasswordScreen` (new + confirm password → `setNewPassword`; "Skip for
   now" → `dismissRecovery`). Only exercised end-to-end with a real reset
   email; in development the event was simulated.
-- Not yet built (roadmap): usernames/public profiles + privacy, follows and
-  a shared feed, likes/comments, discovery, report/block/delete-account.
+- Not yet built (roadmap): likes/comments/notifications, report/block/
+  delete-account, PR chips and stats on *other* people's profiles.
+
+### Social: usernames, follows, feed
+
+Second SQL file, [supabase/social.sql](supabase/social.sql) (run after
+`schema.sql`; idempotent), plus [src/social.js](src/social.js) (thin
+Supabase wrappers) and the screens in `App.jsx` (`FeedScreen`,
+`PeopleScreen`, `UserProfileScreen`, `SocialSettings` inside
+`AccountScreen`, shared `WorkoutPostCard`). **Every privacy rule is enforced
+by row-level security in the database, not by the UI** — the UI just shows
+whatever comes back. The rules were tested against a real Postgres (PGlite,
+17 scenarios: private/public, approvals, impersonation, deleted workouts,
+feed cutoff); that test script isn't in the repo.
+
+- `profiles` gained `username` (unique, `^[a-z0-9_]{3,20}$`),
+  `is_private` (default **true**), `share_workouts` (default **false**),
+  `shared_since_date`. Someone else's profile is readable only once its
+  owner has a username. Nothing is visible to anyone until the owner opts in.
+- `follows(follower_id, followee_id, status pending|accepted)`. A trigger
+  decides status server-side (private target → `pending`, public →
+  `accepted`; the client can't choose); you need a username of your own to
+  follow; only the followed person can approve; either side can delete;
+  switching an account private→public auto-approves waiting requests.
+- `can_view_workouts(target)` (used by an added SELECT policy on
+  `workouts`): yourself, or the owner has a username, `share_workouts` on,
+  and the account is public or you're an accepted follower. Tombstoned
+  (`deleted_at`) workouts are never shown.
+- **Feed vs profile** (the user's explicit design): the home feed
+  (`home_feed()` RPC, keyset-paged) shows accepted-followees' workouts whose
+  `date >= shared_since_date` (the local date sharing was switched on, set by
+  the client) — "as they are posted". Older workouts appear only on that
+  person's profile page (all their workouts, paged 10 at a time). Backdated
+  entries added later before that date therefore never hit the feed. The
+  feed does not include your own workouts. Profile pages of others show
+  follower/following counts (`follow_counts()`), but no stats tiles or PR
+  chips (those need full history; `computeSessionPRs` on a partial page
+  would be wrong).
+- Another person's `day` key resolves via the shared library; their custom-
+  plan keys (`…::n`) don't exist locally, so they display as "Workout"
+  (`socialDayLabel`).
+- The Feed card on Home only shows when signed in. Testing needs two real
+  accounts; during development the UI was exercised against a mocked
+  Supabase (fake session + fake REST) in the browser.
 
 ## Visual design conventions
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Dumbbell, Plus, Trash2, ChevronDown, Save, X, Loader2, History as HistoryIcon, RotateCcw, Timer, TrendingUp, Layers, Home as HomeIcon, Pencil } from "lucide-react";
 import { storage } from "./storage";
+import { getMyAccount, saveMyAccount, searchPeople, getPublicProfile, getFollowCounts, getFollowStatus, follow, unfollow, getPendingRequests, approveRequest, declineRequest, fetchUserWorkouts, fetchHomeFeed, friendlySocialError, USERNAME_RE } from "./social";
 import { useCloud, sync, signIn, signUp, signOut, resetPassword, setNewPassword, dismissRecovery } from "./cloud";
 import { PLAN_LIBRARY, ALL_DAYS_BY_KEY, WEEKDAYS, getScheduledDay, GLOBAL_SLOT_LIBRARY, GLOBAL_SLOT_NAMES, GLOBAL_EXERCISE_LIST, GENERIC_BODY_PARTS } from "./plans";
 import BodyModel from "react-body-highlighter";
@@ -947,7 +948,7 @@ function SetPasswordScreen() {
   );
 }
 
-function AccountScreen({ onBack }) {
+function AccountScreen({ onBack, profile }) {
   const cloud = useCloud();
   const [mode, setMode] = useState("signIn"); // signIn | signUp | reset
   const [email, setEmail] = useState("");
@@ -1048,6 +1049,7 @@ function AccountScreen({ onBack }) {
       <button onClick={onBack} style={backLinkStyle}>‹ Back</button>
       <div className="display" style={{ fontSize: 18, marginBottom: 16 }}>Account &amp; Sync</div>
       {body}
+      {cloud.user && <SocialSettings userId={cloud.user.id} profile={profile} />}
       <div style={{ marginTop: 28, paddingTop: 20, borderTop: "1px solid var(--border)" }}>
         <div style={labelStyle}>Backup</div>
         <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 12 }}>Save a copy of all your workouts, plans and settings from this device as a file. Worth doing before you sign in for the first time.</div>
@@ -1226,57 +1228,10 @@ function ProfileScreen({ profile, stats, history, dayLabelFor, onSave, onBack, o
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {feed.slice(0, feedCount).map((session) => {
-            const blocks = session.blocks || [];
-            const totals = sessionTotals(blocks);
-            const prs = prsBySession[session.id] || [];
-            const isOpen = openPostId === session.id;
-            const shown = isOpen ? blocks : blocks.slice(0, FEED_PREVIEW_EXERCISES);
-            const hidden = blocks.length - FEED_PREVIEW_EXERCISES;
-            return (
-              <div key={session.id} style={{ padding: "14px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "0 2px 8px rgba(0,0,0,0.28)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                  <Avatar profile={profile} size={34} />
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: 13, overflowWrap: "anywhere" }}>
-                      <span style={{ fontWeight: 700 }}>{profile.displayName}</span>
-                      <span style={{ color: "var(--text-muted)" }}> · {fmtDate(session.date)}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="display" style={{ fontSize: 15, marginBottom: 8, overflowWrap: "anywhere" }}>{dayLabelFor(session)}</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
-                  {shown.map((b, i) => (
-                    <div key={i} style={{ fontSize: 12.5, lineHeight: 1.4 }}>
-                      <span style={{ fontWeight: 600, overflowWrap: "anywhere" }}>{b.exercise}</span>
-                      <span className="tabular" style={{ color: b.type === "time" ? "var(--time)" : "var(--text-muted)" }}>{"  "}{summarizeSets(b)}</span>
-                      {isOpen && b.notes && <div style={{ fontSize: 11.5, color: "var(--text-muted)", fontStyle: "italic" }}>{b.notes}</div>}
-                    </div>
-                  ))}
-                  {hidden > 0 && (
-                    <button onClick={() => setOpenPostId(isOpen ? null : session.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px 0", textAlign: "left", color: "var(--accent)", fontSize: 12, fontWeight: 600 }}>
-                      {isOpen ? "Show less" : `Show ${hidden} more exercise${hidden > 1 ? "s" : ""}`}
-                    </button>
-                  )}
-                </div>
-                {prs.length > 0 && (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
-                    {prs.slice(0, 3).map((pr) => (
-                      <span key={pr.exercise} style={{ fontSize: 11, fontWeight: 700, background: "var(--accent-dim)", color: "var(--accent)", borderRadius: 999, padding: "3px 10px", overflowWrap: "anywhere" }}>
-                        New PR · {pr.exercise} {pr.weight}×{pr.value}
-                      </span>
-                    ))}
-                    {prs.length > 3 && <span style={{ fontSize: 11, color: "var(--text-muted)", alignSelf: "center" }}>+{prs.length - 3} more</span>}
-                  </div>
-                )}
-                <div style={{ display: "flex", gap: 14, fontSize: 11.5, color: "var(--text-muted)", paddingTop: 10, borderTop: "1px solid var(--border)" }}>
-                  <span><span className="tabular" style={{ color: "var(--text)", fontWeight: 700 }}>{totals.volume.toLocaleString()}</span> lb</span>
-                  <span><span className="tabular" style={{ color: "var(--text)", fontWeight: 700 }}>{totals.sets}</span> sets</span>
-                  <span><span className="tabular" style={{ color: "var(--text)", fontWeight: 700 }}>{blocks.length}</span> exercises</span>
-                </div>
-              </div>
-            );
-          })}
+          {feed.slice(0, feedCount).map((session) => (
+            <WorkoutPostCard key={session.id} author={profile} session={session} dayLabel={dayLabelFor(session)} prs={prsBySession[session.id] || []}
+              isOpen={openPostId === session.id} onToggle={() => setOpenPostId(openPostId === session.id ? null : session.id)} />
+          ))}
           {feed.length > feedCount && (
             <button onClick={() => setFeedCount((c) => c + FEED_PAGE)} style={{ ...homeChoiceButtonStyle, padding: "11px", textAlign: "center", fontSize: 13, fontWeight: 600 }}>
               Load more ({feed.length - feedCount} older)
@@ -1288,12 +1243,433 @@ function ProfileScreen({ profile, stats, history, dayLabelFor, onSave, onBack, o
   );
 }
 
+// ---------------------------------------------------------------------------
+// Social: one workout "post" card (used by your own profile feed, the home
+// feed, and other people's profiles), plus the Feed / Find People / other
+// user's profile screens. All data comes from src/social.js; who is allowed to
+// see what is enforced by the database, so a screen here just shows whatever
+// comes back (and a friendly "private" note when nothing does).
+// ---------------------------------------------------------------------------
+function WorkoutPostCard({ author, session, dayLabel, prs = [], isOpen, onToggle, onOpenAuthor }) {
+  const blocks = session.blocks || [];
+  const totals = sessionTotals(blocks);
+  const shown = isOpen ? blocks : blocks.slice(0, FEED_PREVIEW_EXERCISES);
+  const hidden = blocks.length - FEED_PREVIEW_EXERCISES;
+  const nameEl = <span style={{ fontWeight: 700 }}>{author.displayName}</span>;
+  return (
+    <div style={{ padding: "14px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "0 2px 8px rgba(0,0,0,0.28)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+        <Avatar profile={author} size={34} />
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: 13, overflowWrap: "anywhere" }}>
+            {onOpenAuthor ? <button onClick={onOpenAuthor} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", color: "var(--text)", fontSize: 13, textAlign: "left" }}>{nameEl}</button> : nameEl}
+            <span style={{ color: "var(--text-muted)" }}> · {fmtDate(session.date)}</span>
+          </div>
+        </div>
+      </div>
+      <div className="display" style={{ fontSize: 15, marginBottom: 8, overflowWrap: "anywhere" }}>{dayLabel}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
+        {shown.map((b, i) => (
+          <div key={i} style={{ fontSize: 12.5, lineHeight: 1.4 }}>
+            <span style={{ fontWeight: 600, overflowWrap: "anywhere" }}>{b.exercise}</span>
+            <span className="tabular" style={{ color: b.type === "time" ? "var(--time)" : "var(--text-muted)" }}>{"  "}{summarizeSets(b)}</span>
+            {isOpen && b.notes && <div style={{ fontSize: 11.5, color: "var(--text-muted)", fontStyle: "italic" }}>{b.notes}</div>}
+          </div>
+        ))}
+        {hidden > 0 && (
+          <button onClick={onToggle} style={{ background: "none", border: "none", cursor: "pointer", padding: "6px 0", textAlign: "left", color: "var(--accent)", fontSize: 12, fontWeight: 600 }}>
+            {isOpen ? "Show less" : `Show ${hidden} more exercise${hidden > 1 ? "s" : ""}`}
+          </button>
+        )}
+      </div>
+      {prs.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+          {prs.slice(0, 3).map((pr) => (
+            <span key={pr.exercise} style={{ fontSize: 11, fontWeight: 700, background: "var(--accent-dim)", color: "var(--accent)", borderRadius: 999, padding: "3px 10px", overflowWrap: "anywhere" }}>
+              New PR · {pr.exercise} {pr.weight}×{pr.value}
+            </span>
+          ))}
+          {prs.length > 3 && <span style={{ fontSize: 11, color: "var(--text-muted)", alignSelf: "center" }}>+{prs.length - 3} more</span>}
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 14, fontSize: 11.5, color: "var(--text-muted)", paddingTop: 10, borderTop: "1px solid var(--border)" }}>
+        <span><span className="tabular" style={{ color: "var(--text)", fontWeight: 700 }}>{totals.volume.toLocaleString()}</span> lb</span>
+        <span><span className="tabular" style={{ color: "var(--text)", fontWeight: 700 }}>{totals.sets}</span> sets</span>
+        <span><span className="tabular" style={{ color: "var(--text)", fontWeight: 700 }}>{blocks.length}</span> exercises</span>
+      </div>
+    </div>
+  );
+}
+
+// A database profile row -> the { displayName, photo } shape Avatar/PostCard use.
+const toAuthor = (p) => ({ id: p.id, username: p.username, displayName: p.display_name || p.username || "Athlete", photo: p.photo || "" });
+
+const socialShell = { padding: "calc(24px + env(safe-area-inset-top)) 16px calc(60px + env(safe-area-inset-bottom))", maxWidth: 520, margin: "0 auto" };
+const socialLabel = { fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700, marginBottom: 10 };
+const smallBtn = (primary) => ({ padding: "8px 14px", borderRadius: 999, fontSize: 12.5, fontWeight: 700, cursor: "pointer", border: primary ? "none" : "1px solid var(--border)", background: primary ? "var(--accent)" : "var(--surface-2)", color: primary ? "var(--on-accent)" : "var(--text)", flexShrink: 0 });
+
+function PersonRow({ person, onOpen, right }) {
+  const a = toAuthor(person);
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)" }}>
+      <button onClick={onOpen} style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0, background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", color: "var(--text)" }}>
+        <Avatar profile={a} size={40} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, overflowWrap: "anywhere" }}>{a.displayName}</div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", overflowWrap: "anywhere" }}>@{person.username}{person.is_private ? " · Private" : ""}</div>
+        </div>
+      </button>
+      {right}
+    </div>
+  );
+}
+
+function FeedScreen({ me, dayLabelFor, onOpenUser, onFindPeople, onOpenAccount, onBack }) {
+  const [account, setAccount] = useState(undefined);
+  const [posts, setPosts] = useState([]);
+  const [authors, setAuthors] = useState({});
+  const [hasMore, setHasMore] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [openId, setOpenId] = useState(null);
+  const [pending, setPending] = useState(0);
+
+  async function loadPage(cursor) {
+    setLoading(true); setError("");
+    try {
+      const page = await fetchHomeFeed(cursor);
+      setPosts((prev) => (cursor ? [...prev, ...page.rows] : page.rows));
+      setAuthors((prev) => ({ ...prev, ...page.authors }));
+      setHasMore(page.hasMore);
+    } catch (e) { setError(friendlySocialError(e)); }
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const acct = await getMyAccount(me.id);
+        if (cancelled) return;
+        setAccount(acct);
+        if (acct.username) {
+          getPendingRequests(me.id).then((r) => { if (!cancelled) setPending(r.length); }).catch(() => {});
+          await loadPage(null);
+        } else setLoading(false);
+      } catch (e) { if (!cancelled) { setError(friendlySocialError(e)); setLoading(false); } }
+    })();
+    return () => { cancelled = true; };
+  }, [me.id]);
+
+  const last = posts[posts.length - 1];
+  return (
+    <div style={socialShell}>
+      <button onClick={onBack} style={backLinkStyle}>‹ Back</button>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 16 }}>
+        <div className="display" style={{ fontSize: 18 }}>Feed</div>
+        {account && account.username && (
+          <button onClick={onFindPeople} style={smallBtn(false)}>Find People{pending > 0 ? ` · ${pending}` : ""}</button>
+        )}
+      </div>
+
+      {account && !account.username && (
+        <div style={{ padding: "16px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)" }}>
+          <div className="display" style={{ fontSize: 15, marginBottom: 6 }}>Join the community</div>
+          <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 12 }}>
+            Pick a username to follow people and see their workouts here. Your account stays private until you choose otherwise.
+          </div>
+          <button onClick={onOpenAccount} style={{ ...homeChoiceButtonStyle, padding: "11px", textAlign: "center", fontSize: 13, fontWeight: 600 }}>Set Up Username</button>
+        </div>
+      )}
+
+      {error && <div style={{ fontSize: 12.5, color: "var(--danger)", marginBottom: 12, lineHeight: 1.4 }}>{error}</div>}
+
+      {account && account.username && (
+        <>
+          {!loading && !error && posts.length === 0 && (
+            <div style={{ textAlign: "center", padding: "32px 8px" }}>
+              <div style={{ fontSize: 13.5, marginBottom: 6 }}>Nothing here yet</div>
+              <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 16 }}>
+                Follow people and their new workouts show up here. To see someone's past workouts, open their profile.
+              </div>
+              <button onClick={onFindPeople} style={{ ...homeChoiceButtonStyle, padding: "11px", textAlign: "center", fontSize: 13, fontWeight: 600 }}>Find People</button>
+            </div>
+          )}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {posts.map((w) => {
+              const p = authors[w.user_id];
+              if (!p) return null;
+              const key = `${w.user_id}|${w.id}`;
+              return (
+                <WorkoutPostCard key={key} author={toAuthor(p)} session={w} dayLabel={dayLabelFor(w)} isOpen={openId === key}
+                  onToggle={() => setOpenId(openId === key ? null : key)} onOpenAuthor={() => onOpenUser(w.user_id)} />
+              );
+            })}
+          </div>
+          {loading && <div style={{ fontSize: 12.5, color: "var(--text-muted)", textAlign: "center", padding: "16px 0" }}>Loading…</div>}
+          {!loading && hasMore && (
+            <button onClick={() => loadPage(last)} style={{ ...homeChoiceButtonStyle, marginTop: 10, padding: "11px", textAlign: "center", fontSize: 13, fontWeight: 600 }}>Load more</button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function PeopleScreen({ me, onOpenUser, onBack }) {
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [requests, setRequests] = useState([]);
+  const [error, setError] = useState("");
+
+  const loadRequests = () => getPendingRequests(me.id).then(setRequests).catch((e) => setError(friendlySocialError(e)));
+  useEffect(() => { loadRequests(); }, [me.id]);
+
+  useEffect(() => {
+    if (q.trim().length < 2) { setResults([]); return; }
+    let cancelled = false;
+    setSearching(true);
+    const t = setTimeout(async () => {
+      try { const r = await searchPeople(q, me.id); if (!cancelled) { setResults(r); setError(""); } }
+      catch (e) { if (!cancelled) setError(friendlySocialError(e)); }
+      if (!cancelled) setSearching(false);
+    }, 350);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [q, me.id]);
+
+  async function answer(person, ok) {
+    try {
+      if (ok) await approveRequest(me.id, person.id); else await declineRequest(me.id, person.id);
+      setRequests((r) => r.filter((x) => x.id !== person.id));
+    } catch (e) { setError(friendlySocialError(e)); }
+  }
+
+  return (
+    <div style={socialShell}>
+      <button onClick={onBack} style={backLinkStyle}>‹ Back</button>
+      <div className="display" style={{ fontSize: 18, marginBottom: 16 }}>Find People</div>
+
+      {requests.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={socialLabel}>Follow Requests</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {requests.map((p) => (
+              <PersonRow key={p.id} person={p} onOpen={() => onOpenUser(p.id)} right={
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button onClick={() => answer(p, true)} style={smallBtn(true)}>Accept</button>
+                  <button onClick={() => answer(p, false)} style={smallBtn(false)}>Decline</button>
+                </div>
+              } />
+            ))}
+          </div>
+        </div>
+      )}
+
+      <input type="text" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by username or name" autoCapitalize="none" autoCorrect="off"
+        style={{ width: "100%", padding: "11px 12px", borderRadius: 10, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 14, marginBottom: 14 }} />
+      {error && <div style={{ fontSize: 12.5, color: "var(--danger)", marginBottom: 12 }}>{error}</div>}
+      {q.trim().length >= 2 && !searching && results.length === 0 && !error && (
+        <div style={{ fontSize: 12.5, color: "var(--text-muted)", textAlign: "center", padding: "16px 0" }}>No one found. Try someone's exact username.</div>
+      )}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {results.map((p) => <PersonRow key={p.id} person={p} onOpen={() => onOpenUser(p.id)} />)}
+      </div>
+    </div>
+  );
+}
+
+function UserProfileScreen({ me, userId, dayLabelFor, onBack }) {
+  const [profile, setProfile] = useState(undefined); // undefined = loading, null = not found
+  const [counts, setCounts] = useState({ followers: 0, following: 0 });
+  const [status, setStatus] = useState(null);
+  const [workouts, setWorkouts] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [wLoading, setWLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [openId, setOpenId] = useState(null);
+
+  async function loadWorkouts(offset) {
+    setWLoading(true);
+    try {
+      const { rows, total: t } = await fetchUserWorkouts(userId, offset, FEED_PAGE);
+      setWorkouts((prev) => (offset ? [...prev, ...rows] : rows));
+      setTotal(t);
+    } catch (e) { setError(friendlySocialError(e)); }
+    setWLoading(false);
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const p = await getPublicProfile(userId);
+        if (cancelled) return;
+        setProfile(p);
+        if (!p) return;
+        const [c, s] = await Promise.all([getFollowCounts(userId), getFollowStatus(me.id, userId)]);
+        if (cancelled) return;
+        setCounts(c); setStatus(s);
+        await loadWorkouts(0);
+      } catch (e) { if (!cancelled) { setError(friendlySocialError(e)); setProfile((p) => (p === undefined ? null : p)); } }
+    })();
+    return () => { cancelled = true; };
+  }, [userId, me.id]);
+
+  async function toggleFollow() {
+    setBusy(true); setError("");
+    try {
+      if (status) {
+        await unfollow(me.id, userId);
+        setStatus(null);
+        if (profile.is_private) { setWorkouts([]); setTotal(0); }
+      } else {
+        const s = await follow(me.id, userId);
+        setStatus(s);
+        if (s === "accepted") loadWorkouts(0);
+      }
+      getFollowCounts(userId).then(setCounts).catch(() => {});
+    } catch (e) { setError(friendlySocialError(e)); }
+    setBusy(false);
+  }
+
+  const author = profile ? toAuthor(profile) : null;
+  const followLabel = status === "accepted" ? "Following" : status === "pending" ? "Requested" : profile && profile.is_private ? "Request to Follow" : "Follow";
+  const canSee = profile && (!profile.is_private || status === "accepted") && profile.share_workouts;
+
+  return (
+    <div style={socialShell}>
+      <button onClick={onBack} style={backLinkStyle}>‹ Back</button>
+      {profile === undefined && <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Loading…</div>}
+      {profile === null && <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{error || "This profile isn't available."}</div>}
+      {profile && (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 14 }}>
+            <Avatar profile={author} size={84} />
+            <div style={{ minWidth: 0 }}>
+              <div className="display" style={{ fontSize: 22, overflowWrap: "anywhere" }}>{author.displayName}</div>
+              <div style={{ fontSize: 12.5, color: "var(--text-muted)", overflowWrap: "anywhere" }}>@{profile.username}{profile.is_private ? " · Private" : ""}</div>
+              {profile.goal && <span style={{ display: "inline-block", marginTop: 6, fontSize: 11, fontWeight: 700, background: "var(--accent-dim)", color: "var(--accent)", borderRadius: 999, padding: "2px 10px" }}>{profile.goal}</span>}
+            </div>
+          </div>
+          {profile.bio && <div style={{ fontSize: 13.5, lineHeight: 1.5, marginBottom: 14, overflowWrap: "anywhere" }}>{profile.bio}</div>}
+          <div style={{ display: "flex", gap: 18, fontSize: 12.5, color: "var(--text-muted)", marginBottom: 14 }}>
+            <span><span className="tabular" style={{ color: "var(--text)", fontWeight: 700 }}>{counts.followers}</span> followers</span>
+            <span><span className="tabular" style={{ color: "var(--text)", fontWeight: 700 }}>{counts.following}</span> following</span>
+          </div>
+          {profile.id !== me.id && (
+            <button onClick={toggleFollow} disabled={busy} style={{ ...(status ? homeChoiceButtonStyle : { ...homeChoiceButtonStyle, background: "var(--accent)", border: "none", color: "var(--on-accent)", boxShadow: PRIMARY_SHADOW }), padding: "11px", textAlign: "center", fontSize: 13.5, fontWeight: 700, marginBottom: 20, opacity: busy ? 0.6 : 1 }}>
+              {followLabel}
+            </button>
+          )}
+          {error && <div style={{ fontSize: 12.5, color: "var(--danger)", marginBottom: 12 }}>{error}</div>}
+
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", margin: "8px 0 10px", paddingTop: 18, borderTop: "1px solid var(--border)" }}>
+            <div style={{ ...socialLabel, marginBottom: 0 }}>Workouts</div>
+            {canSee && <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{total} total</div>}
+          </div>
+          {profile.is_private && status !== "accepted" ? (
+            <div style={{ fontSize: 12.5, color: "var(--text-muted)", textAlign: "center", padding: "24px 0", lineHeight: 1.5 }}>
+              This account is private. {status === "pending" ? "Your request is waiting for approval." : "Follow to see their workouts."}
+            </div>
+          ) : !profile.share_workouts ? (
+            <div style={{ fontSize: 12.5, color: "var(--text-muted)", textAlign: "center", padding: "24px 0" }}>{author.displayName} isn't sharing workouts.</div>
+          ) : workouts.length === 0 && !wLoading ? (
+            <div style={{ fontSize: 12.5, color: "var(--text-muted)", textAlign: "center", padding: "24px 0" }}>No workouts yet.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {workouts.map((w) => (
+                <WorkoutPostCard key={w.id} author={author} session={w} dayLabel={dayLabelFor(w)} isOpen={openId === w.id} onToggle={() => setOpenId(openId === w.id ? null : w.id)} />
+              ))}
+              {wLoading && <div style={{ fontSize: 12.5, color: "var(--text-muted)", textAlign: "center" }}>Loading…</div>}
+              {!wLoading && workouts.length < total && (
+                <button onClick={() => loadWorkouts(workouts.length)} style={{ ...homeChoiceButtonStyle, padding: "11px", textAlign: "center", fontSize: 13, fontWeight: 600 }}>
+                  Load more ({total - workouts.length} older)
+                </button>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// "Social" settings block on the Account screen: username + privacy choices.
+function SocialSettings({ userId, profile }) {
+  const [acct, setAcct] = useState(undefined);
+  const [username, setUsername] = useState("");
+  const [isPrivate, setIsPrivate] = useState(true);
+  const [share, setShare] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState({ text: "", bad: false });
+  const hasName = !!(profile && profile.displayName);
+
+  useEffect(() => {
+    let cancelled = false;
+    getMyAccount(userId).then((a) => {
+      if (cancelled) return;
+      setAcct(a); setUsername(a.username || ""); setIsPrivate(a.is_private); setShare(a.share_workouts);
+    }).catch((e) => { if (!cancelled) { setAcct(null); setMsg({ text: friendlySocialError(e), bad: true }); } });
+    return () => { cancelled = true; };
+  }, [userId]);
+
+  const valid = USERNAME_RE.test(username);
+  const changed = acct && (username !== (acct.username || "") || isPrivate !== acct.is_private || share !== acct.share_workouts);
+  async function save() {
+    setBusy(true); setMsg({ text: "", bad: false });
+    try {
+      await saveMyAccount(userId, { username, isPrivate, shareWorkouts: share }, acct, todayISO());
+      setAcct(await getMyAccount(userId));
+      setMsg({ text: "Saved.", bad: false });
+    } catch (e) { setMsg({ text: friendlySocialError(e), bad: true }); }
+    setBusy(false);
+  }
+  const row = (checked, onChange, title, desc) => (
+    <label style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 0", cursor: "pointer" }}>
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} style={{ width: 20, height: 20, marginTop: 1, accentColor: "var(--accent)", flexShrink: 0 }} />
+      <div>
+        <div style={{ fontSize: 13.5, fontWeight: 600 }}>{title}</div>
+        <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.45, marginTop: 2 }}>{desc}</div>
+      </div>
+    </label>
+  );
+
+  return (
+    <div style={{ marginTop: 28, paddingTop: 20, borderTop: "1px solid var(--border)" }}>
+      <div style={socialLabel}>Social</div>
+      {!hasName ? (
+        <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5 }}>Set up your profile (name and photo) first, then come back to pick a username.</div>
+      ) : acct === undefined ? (
+        <div style={{ fontSize: 12.5, color: "var(--text-muted)" }}>Loading…</div>
+      ) : (
+        <>
+          <div style={{ fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 14 }}>
+            A username lets people find you and lets you follow others. Nothing you log is visible to anyone unless you turn sharing on.
+          </div>
+          <div style={{ fontSize: 10.5, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700, marginBottom: 6 }}>Username</div>
+          <input type="text" value={username} maxLength={20} autoCapitalize="none" autoCorrect="off" onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
+            style={{ width: "100%", padding: "11px 12px", borderRadius: 10, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 14, marginBottom: 4 }} />
+          <div style={{ fontSize: 11, color: username && !valid ? "var(--danger)" : "var(--text-muted)", marginBottom: 8 }}>3–20 letters, numbers or underscores.</div>
+          {row(isPrivate, setIsPrivate, "Private account", "People must send a follow request and you approve them. Turn off to let anyone follow you instantly.")}
+          {row(share, setShare, "Share my workouts", "Followers see each workout you save from now on in their feed, and can browse your past workouts on your profile.")}
+          <button onClick={save} disabled={!valid || !changed || busy} style={{ width: "100%", padding: "12px", borderRadius: 10, marginTop: 6, background: valid && changed && !busy ? "var(--accent)" : "var(--surface-2)", border: "none", cursor: valid && changed && !busy ? "pointer" : "not-allowed", fontSize: 14, fontWeight: 700, color: valid && changed && !busy ? "var(--on-accent)" : "var(--text-muted)", boxShadow: valid && changed && !busy ? PRIMARY_SHADOW : "none" }}>
+            {busy ? "Saving…" : "Save"}
+          </button>
+          {msg.text && <div style={{ fontSize: 12.5, marginTop: 10, color: msg.bad ? "var(--danger)" : "var(--text)" }}>{msg.text}</div>}
+        </>
+      )}
+    </div>
+  );
+}
+
 // Landing screen: just enough to get into a session (Continue) or into the
 // Split Builder for everything else (choosing, building, or editing a
 // split, and its schedule) — all of that used to live here directly, but
 // consolidating it into one dedicated screen kept this one from having to
 // juggle "pick a plan" and "log a workout" at once.
-function HomeScreen({ activePlan, profile, onContinue, onManageSplit, onOpenProfile }) {
+function HomeScreen({ activePlan, profile, onContinue, onManageSplit, onOpenProfile, onOpenFeed }) {
   const header = (
     <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginBottom: 4 }}>
       <Dumbbell size={22} color="var(--accent)" />
@@ -1327,6 +1703,13 @@ function HomeScreen({ activePlan, profile, onContinue, onManageSplit, onOpenProf
         <div style={{ fontSize: 12.5, color: "var(--text-muted)", textAlign: "center", lineHeight: 1.5, marginBottom: 20 }}>
           You don't have a training split set up yet.
         </div>
+      )}
+
+      {onOpenFeed && (
+        <button onClick={onOpenFeed} style={{ width: "100%", textAlign: "left", padding: "16px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", cursor: "pointer", color: "var(--text)", marginBottom: 16 }}>
+          <div className="display" style={{ fontSize: 15 }}>Feed</div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3 }}>New workouts from the people you follow</div>
+        </button>
       )}
 
       <button onClick={onManageSplit} style={{ width: "100%", textAlign: "left", padding: "16px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", cursor: "pointer", color: "var(--text)" }}>
@@ -2426,6 +2809,8 @@ export default function WorkoutTracker() {
   // effect below depends on it, so state re-reads from storage.
   const [dataVersion, setDataVersion] = useState(0);
   const cloudState = useCloud();
+  const [viewUserId, setViewUserId] = useState(null);
+  const [userBack, setUserBack] = useState("feed");
   useEffect(() => sync.onRemoteApplied(() => setDataVersion((v) => v + 1)), []);
 
   useEffect(() => {
@@ -2602,6 +2987,14 @@ export default function WorkoutTracker() {
     return merged;
   }, [customPlans]);
   const activePlan = allPlans.find((p) => p.id === selectedPlanId) || null;
+  // Label for a workout that may belong to someone else: built-in days resolve
+  // through the shared library; another person's custom-plan day keys don't
+  // exist here, so they show generically.
+  const socialDayLabel = (session) => {
+    const d = allDaysByKey[session.day];
+    if (d) return d.label !== d.tab ? `${d.tab} · ${d.label}` : d.tab;
+    return String(session.day).includes("::") ? "Workout" : session.day;
+  };
 
   // Layers this plan's permanent Plan Editor overrides (recurring every
   // week, unlike `hiddenSlots`) on top of its own `days` — added slots are
@@ -3503,7 +3896,7 @@ export default function WorkoutTracker() {
 
       <div style={{ position: "relative", zIndex: 1 }}>
       {screen === "home" && (
-        <HomeScreen activePlan={activePlan} profile={profile} onContinue={continueWithCurrentPlan} onManageSplit={() => setScreen("splitBuilder")} onOpenProfile={() => setScreen("profile")} />
+        <HomeScreen activePlan={activePlan} profile={profile} onContinue={continueWithCurrentPlan} onManageSplit={() => setScreen("splitBuilder")} onOpenProfile={() => setScreen("profile")} onOpenFeed={cloudState.user ? () => setScreen("feed") : null} />
       )}
 
       {screen === "profile" && (
@@ -3521,7 +3914,19 @@ export default function WorkoutTracker() {
         />
       )}
 
-      {screen === "account" && <AccountScreen onBack={() => setScreen("profile")} />}
+      {screen === "account" && <AccountScreen profile={profile} onBack={() => setScreen("profile")} />}
+
+      {screen === "feed" && cloudState.user && (
+        <FeedScreen me={cloudState.user} dayLabelFor={socialDayLabel}
+          onOpenUser={(id) => { setViewUserId(id); setUserBack("feed"); setScreen("user"); }}
+          onFindPeople={() => setScreen("people")} onOpenAccount={() => setScreen("account")} onBack={goToHome} />
+      )}
+      {screen === "people" && cloudState.user && (
+        <PeopleScreen me={cloudState.user} onOpenUser={(id) => { setViewUserId(id); setUserBack("people"); setScreen("user"); }} onBack={() => setScreen("feed")} />
+      )}
+      {screen === "user" && cloudState.user && viewUserId && (
+        <UserProfileScreen key={viewUserId} me={cloudState.user} userId={viewUserId} dayLabelFor={socialDayLabel} onBack={() => setScreen(userBack)} />
+      )}
 
       {screen === "splitBuilder" && (
         <SplitBuilderScreen

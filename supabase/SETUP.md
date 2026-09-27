@@ -9,3 +9,8 @@
 5. Project Settings -> API Keys: copy the Project URL and the **publishable**
    key (`sb_publishable_...`, or the legacy `anon` key) into `src/supabaseConfig.js`.
    Never copy the `secret` / `service_role` key anywhere in this repo.
+
+## Social features (after the steps above)
+
+6. SQL Editor -> New query -> paste all of `supabase/social.sql` -> Run.
+   (Adds usernames, follows and the feed. Safe to re-run.)
