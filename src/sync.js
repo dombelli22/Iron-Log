@@ -27,6 +27,7 @@ export const KV_KEYS = [
   "plan-day-overrides",
   "last-used-exercise",
   "rep-range",
+  "top-lifts",
   "week-drafts",
 ];
 export const SYNCED_KEYS = [HISTORY_KEY, PROFILE_KEY, ...KV_KEYS];

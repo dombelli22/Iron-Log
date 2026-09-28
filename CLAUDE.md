@@ -574,7 +574,22 @@ primary/secondary status object into the package's
 persisted to `localStorage` key `ironlog:rep-range`, editable from the Split
 Builder hub): one overarching rep-range target, used everywhere the "bump
 the weight" nudge shows — hit or exceed `max` on an exercise's last logged
-set and it flags. This replaced `REP_RANGE_TYPE`, a per-exercise
+set and it flags.
+
+`topLiftChoices` (`WorkoutTracker` state, an array of up to 5 exercise
+names, persisted to `localStorage` key `ironlog:top-lifts`, synced like
+`rep-range`): powers the "Top Lifts" section on the **owner's own**
+profile — the user picks which exercises show there (`TopLiftsSection`,
+`App.jsx`), rather than it being auto-ranked. Each picked name looks up its
+best logged set (heaviest weight, reps breaking a tie — the same
+`bestByExercise` map `computeProfileStats` already built for the old
+auto-ranked version) and shows "Not logged yet" if that exercise has never
+been logged. Picking is a search box (filtered `GLOBAL_EXERCISE_LIST`) —
+catalog exercises only, not freely typed, so it can always resolve to a
+real name. This replaced the old top-5-by-weight auto ranking and the
+separate "Most Trained" tile (removed entirely, including
+`computeProfileStats`'s `setsByExercise`/`mostTrained`) — the user found
+picking their own lifts more useful than an automatic ranking. This replaced `REP_RANGE_TYPE`, a per-exercise
 `"compound"` (6–10)/`"isolation"` (10–15) classification hardcoded for every
 catalog exercise — removed entirely, `[min, max]` are read directly at both
 call sites instead of going through a lookup. The old scheme only ever

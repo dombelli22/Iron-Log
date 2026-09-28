@@ -750,12 +750,10 @@ function computeProfileStats(history) {
   let sets = 0;
   let volume = 0;
   const weeks = new Set();
-  const setsByExercise = {};
   const best = {};
   history.forEach((session) => {
     weeks.add(weekKeyFor(session.date));
     (session.blocks || []).forEach((b) => {
-      setsByExercise[b.exercise] = (setsByExercise[b.exercise] || 0) + b.sets.length;
       b.sets.forEach((st) => {
         sets += 1;
         if (b.type === "reps") volume += st.weight * st.value;
@@ -786,7 +784,6 @@ function computeProfileStats(history) {
     if (run > longestStreak) longestStreak = run;
   });
 
-  const mostTrained = Object.entries(setsByExercise).sort((a, b) => b[1] - a[1])[0];
   const dates = history.map((h) => h.date).sort();
   return {
     workouts: history.length,
@@ -795,8 +792,10 @@ function computeProfileStats(history) {
     currentStreak,
     longestStreak,
     thisWeek: history.filter((h) => weekKeyFor(h.date) === thisWeek).length,
-    topLifts: Object.values(best).sort((a, b) => b.weight - a.weight || b.value - a.value).slice(0, 5),
-    mostTrained: mostTrained ? { exercise: mostTrained[0], sets: mostTrained[1] } : null,
+    // Best (heaviest, reps breaking a tie) logged set per exercise name —
+    // the user picks up to 5 of these to show as "Top Lifts" (`topLiftChoices`,
+    // WorkoutTracker state); this map is what that picker looks values up in.
+    bestByExercise: best,
     firstWorkout: dates[0] || null,
   };
 }
@@ -1208,7 +1207,104 @@ function AccountScreen({ onBack, profile, onOpenLegal, onDeleted }) {
   );
 }
 
-function ProfileScreen({ me, profile, stats, history, dayLabelFor, onSave, onBack, onOpenAccount, onManageSplit, activePlanName, onAddPast, onEditSession, onDeleteSession, canEditSession }) {
+const TOP_LIFTS_MAX = 5;
+
+// User-picked "Top Lifts": up to 5 exercise names the person chose
+// themselves (`topLiftChoices`, persisted `localStorage` key `ironlog:top-lifts`,
+// synced like `rep-range`), each showing its best logged set — heaviest weight,
+// reps breaking a tie, same ranking `computeProfileStats`'s `bestByExercise`
+// already uses — or "Not logged yet" if that exercise has no weighted set.
+function TopLiftsSection({ choices, onChange, bestByExercise }) {
+  const [editing, setEditing] = useState(false);
+  const [picking, setPicking] = useState(null); // index of the slot being filled, or null
+  const [query, setQuery] = useState("");
+  const list = choices || [];
+
+  const options = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return GLOBAL_EXERCISE_LIST.map((e) => e.name)
+      .filter((name) => !list.includes(name))
+      .filter((name) => !q || name.toLowerCase().includes(q))
+      .slice(0, 40);
+  }, [query, list]);
+
+  function pick(name) {
+    const next = [...list];
+    next[picking] = name;
+    onChange(next.filter(Boolean).slice(0, TOP_LIFTS_MAX));
+    setPicking(null);
+    setQuery("");
+  }
+  function removeAt(i) {
+    onChange(list.filter((_, idx) => idx !== i));
+  }
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700 }}>Top Lifts</div>
+        <button onClick={() => { setEditing((e) => !e); setPicking(null); setQuery(""); }} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent)", fontSize: 12, fontWeight: 700 }}>
+          {editing ? "Done" : "Edit"}
+        </button>
+      </div>
+
+      {!editing && list.length === 0 && (
+        <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 4 }}>
+          Choose up to {TOP_LIFTS_MAX} exercises to track here.
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {list.map((name, i) => {
+          const best = bestByExercise[name];
+          return (
+            <div key={name + i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "12px 14px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)" }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, overflowWrap: "anywhere" }}>{name}</div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{best ? fmtDate(best.date) : "Not logged yet"}</div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+                {best && <div className="display tabular" style={{ fontSize: 15, color: "var(--accent)" }}>{best.weight} lb × {best.value}</div>}
+                {editing && (
+                  <button onClick={() => removeAt(i)} aria-label={`Remove ${name}`} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" }}>
+                    <X size={15} color="var(--text-muted)" />
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {editing && list.length < TOP_LIFTS_MAX && (
+          picking === list.length ? (
+            <div style={{ padding: "10px 12px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--accent)" }}>
+              <input
+                type="text" autoFocus value={query} onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search exercises…"
+                style={{ width: "100%", padding: "9px 10px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 13.5, marginBottom: 8 }}
+              />
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 220, overflowY: "auto" }}>
+                {options.map((name) => (
+                  <button key={name} onClick={() => pick(name)} style={{ textAlign: "left", padding: "8px 10px", borderRadius: 7, background: "var(--surface-2)", border: "none", cursor: "pointer", color: "var(--text)", fontSize: 13 }}>
+                    {name}
+                  </button>
+                ))}
+                {options.length === 0 && <div style={{ fontSize: 12, color: "var(--text-muted)", padding: "6px 2px" }}>No matches.</div>}
+              </div>
+              <button onClick={() => { setPicking(null); setQuery(""); }} style={{ marginTop: 8, background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: 12, padding: "6px 0" }}>Cancel</button>
+            </div>
+          ) : (
+            <button onClick={() => { setPicking(list.length); setQuery(""); }} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "11px", borderRadius: 12, background: "transparent", border: "1px dashed var(--accent)", cursor: "pointer", color: "var(--accent)", fontSize: 13, fontWeight: 700 }}>
+              <Plus size={15} /> Add Exercise
+            </button>
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ProfileScreen({ me, profile, stats, history, dayLabelFor, onSave, onBack, onOpenAccount, onManageSplit, activePlanName, onAddPast, onEditSession, onDeleteSession, canEditSession, topLiftChoices, onTopLiftsChange }) {
   const cloud = useCloud();
   const hasProfile = !!(profile && profile.displayName);
   const [editing, setEditing] = useState(!hasProfile);
@@ -1344,32 +1440,7 @@ function ProfileScreen({ me, profile, stats, history, dayLabelFor, onSave, onBac
         {tile(stats.sets.toLocaleString(), "Sets logged")}
       </div>
 
-      <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700, marginBottom: 10 }}>Top Lifts</div>
-      {stats.topLifts.length === 0 ? (
-        <div style={{ fontSize: 12.5, color: "var(--text-muted)", marginBottom: 24 }}>Log a weighted workout and your heaviest sets show up here.</div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 24 }}>
-          {stats.topLifts.map((l) => (
-            <div key={l.exercise} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "12px 14px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)" }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 600, overflowWrap: "anywhere" }}>{l.exercise}</div>
-                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{fmtDate(l.date)}</div>
-              </div>
-              <div className="display tabular" style={{ fontSize: 15, color: "var(--accent)", flexShrink: 0 }}>{l.weight} lb × {l.value}</div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {stats.mostTrained && (
-        <>
-          <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700, marginBottom: 10 }}>Most Trained</div>
-          <div style={{ padding: "12px 14px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)" }}>
-            <div style={{ fontSize: 13.5, fontWeight: 600, overflowWrap: "anywhere" }}>{stats.mostTrained.exercise}</div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{stats.mostTrained.sets} sets logged</div>
-          </div>
-        </>
-      )}
+      <TopLiftsSection choices={topLiftChoices} onChange={onTopLiftsChange} bestByExercise={stats.bestByExercise} />
 
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", margin: "28px 0 10px", paddingTop: 18, borderTop: "1px solid var(--border)" }}>
         <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700 }}>Workouts</div>
@@ -3222,6 +3293,9 @@ export default function WorkoutTracker() {
   // set is what triggers the "bump the weight" nudge, for any reps exercise.
   // Set from the Split Builder hub; [min, max].
   const [repRangeSetting, setRepRangeSetting] = useState([8, 12]);
+  // Up to 5 exercise names the user picked to show as "Top Lifts" on their
+  // profile — see `TopLiftsSection`. Persisted/synced like rep range.
+  const [topLiftChoices, setTopLiftChoices] = useState([]);
   // Saved profile record (name, photo, bio, goal) — see `computeProfileStats`
   // for the numbers on the profile page, which are derived from History.
   const [profile, setProfile] = useState(null);
@@ -3350,6 +3424,25 @@ export default function WorkoutTracker() {
     loadRepRange();
     return () => { cancelled = true; };
   }, [dataVersion]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadTopLifts() {
+      try {
+        const res = await storage.get("top-lifts", false);
+        if (!cancelled && res && res.value) setTopLiftChoices(JSON.parse(res.value));
+      } catch (e) {
+        // none picked yet
+      }
+    }
+    loadTopLifts();
+    return () => { cancelled = true; };
+  }, [dataVersion]);
+
+  function updateTopLifts(next) {
+    setTopLiftChoices(next);
+    storage.set("top-lifts", JSON.stringify(next), false).catch(() => {});
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -4346,6 +4439,8 @@ export default function WorkoutTracker() {
           onEditSession={startEditHistory}
           onDeleteSession={deleteSession}
           canEditSession={(id) => !liveLinkedHistoryIds.has(id)}
+          topLiftChoices={topLiftChoices}
+          onTopLiftsChange={updateTopLifts}
         />
       )}
 
